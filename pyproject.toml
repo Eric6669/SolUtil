@@ -2,13 +2,14 @@
 requires = ["setuptools>=64", "setuptools_scm>=8"]
 build-backend = "setuptools.build_meta"
 
-#[tool.setuptools_scm]
-#version_file = "SolUtil/_version.py"
+[tool.setuptools_scm]
+version_file = "SolUtil/_version.py"
 
 
 [project]
 name = "SolUtil"
-version = "0.0.1"
+#version = "0.0.1"
+dynamic = ["version"]
 dependencies = [
     "Solverz"
 ]
