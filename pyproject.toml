@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=64", "setuptools_scm>=8"]
+build-backend = "setuptools.build_meta"
+
+#[tool.setuptools_scm]
+#version_file = "SolUtil/_version.py"
+
+
+[project]
+name = "SolUtil"
+version = "0.0.1"
+dependencies = [
+    "Solverz"
+]
+authors = [
+    { name = "Ruizhi Yu", email = "rz.yu@foxmail.com" },
+]
+description = "The util lib for Solverz"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
