@@ -48,9 +48,17 @@ def load_ngs(filename):
     ns_node_cond = df['node']['type'] == 1
     ns_node = np.asarray(df['node'][ns_node_cond]['idx'])
     gc['ns_node'] = ns_node
-    s_node_cond = df['node']['type'] == 2
+    s_node_cond = df['node']['type'] != 1
     s_node = np.asarray(df['node'][s_node_cond]['idx'])
     gc['s_node'] = s_node
+    slack_cond = df['node']['type'] == 3
+    slack_node = np.asarray(df['node'][slack_cond]['idx'])
+    non_slack_source_node = np.setdiff1d(s_node, slack_node)
+    non_slack_cond = df['node']['type'] != 3
+    non_slack_node = np.setdiff1d(np.arange(len(df['node'])), slack_node)
+    gc['slack'] = slack_node
+    gc['non_slack_source'] = non_slack_source_node
+    gc['non_slack_node'] = non_slack_node
     n_node = len(df['node'])
     gc['n_node'] = n_node
     gc['n_pipe'] = len(df['pipe'])
@@ -94,6 +102,7 @@ def load_ngs(filename):
     D = np.asarray(df['pipe']['Diameter'])
     Pi = np.array(df['node']['p'])
     finset = np.array(df['node'][ns_node_cond]['q'])
+    non_slack_fin_set = np.array(df['node'][non_slack_cond]['q'])
     Piset = np.array(df['node'][s_node_cond]['p'])
     L = np.asarray(df['pipe']['Length'])
     va = 340
@@ -103,6 +112,7 @@ def load_ngs(filename):
     gc['D'] = D
     gc['Pi'] = Pi
     gc['finset'] = finset
+    gc['non_slack_fin_set'] = non_slack_fin_set
     gc['Piset'] = Piset
     gc['L'] = L
     gc['va'] = va
