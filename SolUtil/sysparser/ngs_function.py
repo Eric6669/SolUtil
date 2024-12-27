@@ -57,11 +57,23 @@ def load_ngs(filename):
     non_slack_cond = df['node']['type'] != 3
     non_slack_node = np.setdiff1d(np.arange(len(df['node'])), slack_node)
     gc['slack'] = slack_node
+    gc['n_slack'] = len(slack_node)
     gc['non_slack_source'] = non_slack_source_node
     gc['non_slack_node'] = non_slack_node
     n_node = len(df['node'])
     gc['n_node'] = n_node
     gc['n_pipe'] = len(df['pipe'])
+    gc['fs'] = np.asarray(df['node']['fs'])
+    gc['fl'] = np.asarray(df['node']['fl'])
+    gc['delta'] = np.asarray(df['pipe']['delta'])
+
+    # loop detection and conversion
+    if 'loop' in df:
+        pipe_in_loop = df['loop']['loop1'] == 1
+        pinloop = np.asarray(df['loop'][pipe_in_loop]['idx'])
+        gc['pinloop'] = pinloop
+    else:
+        gc['pinloop'] = []
 
     G = nx.DiGraph()
 

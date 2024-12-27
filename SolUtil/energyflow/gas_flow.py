@@ -4,11 +4,13 @@ Solve gas flow equations using optimization
 import os
 
 from pyomo.environ import (Reals, Var, AbstractModel, Set, Param, Constraint, minimize,
-                           SolverFactory, Objective)
+                           SolverFactory, Objective, PositiveReals)
 from Solverz import Var as SolVar, Param as SolParam, Eqn, Model, made_numerical, nr_method, module_printer, Sign
 import numpy as np
 import pandas as pd
 import networkx as nx
+from scipy.sparse.linalg import lsqr
+from copy import deepcopy
 from ..sysparser import load_ngs
 
 __all__ = ['GasFlow', 'mdl_ngs']
@@ -18,6 +20,7 @@ def gas_flow_mdl():
     m = AbstractModel()
     m.Nodes = Set()
     m.Arcs = Set(dimen=2)
+    m.slack_nodes = Set()
     m.non_slack_nodes = Set()
 
     def NodesIn_init(m, node):
@@ -35,22 +38,77 @@ def gas_flow_mdl():
     m.NodesOut = Set(m.Nodes, initialize=NodesOut_init)
 
     m.f = Var(m.Arcs, domain=Reals)
-    m.c = Param(m.Arcs)
-    m.minset = Param(m.Nodes, mutable=True)
+    m.c = Param(m.Arcs, mutable=True)
+    m.fs = Param(m.Nodes, mutable=True)
+    m.fs_slack = Var(m.slack_nodes, domain=Reals)
+    m.fl = Param(m.Nodes, mutable=True)
+    m.Piset = Param(m.slack_nodes, mutable=True, domain=Reals)
+    m.delta = Param(m.Arcs, domain=Reals)
 
-    def m_continuity_rule(m, node):
-        return m.minset[node] == sum(m.f[i, node] for i in m.NodesIn[node]) - sum(
+    def m_continuity_rule1(m, node):
+        return m.fl[node] - m.fs_slack[node] == sum(m.f[i, node] for i in m.NodesIn[node]) - sum(
             m.f[node, j] for j in m.NodesOut[node])
 
-    m.m_balance = Constraint(m.non_slack_nodes, rule=m_continuity_rule)
+    m.m_balance1 = Constraint(m.slack_nodes, rule=m_continuity_rule1)
+
+
+    def m_continuity_rule2(m, node):
+        return m.fl[node] - m.fs[node] == sum(m.f[i, node] for i in m.NodesIn[node]) - sum(
+            m.f[node, j] for j in m.NodesOut[node])
+
+    m.m_balance2 = Constraint(m.non_slack_nodes, rule=m_continuity_rule2)
 
     def obj(m):
-        return sum(1 / m.c[i, j] * abs(m.f[i, j]) ** 3 / 3 for i, j in m.Arcs)
+        obj_ = sum(m.c[i, j] * abs(m.f[i, j]) ** 3 / 3 - m.delta[i,j]*m.f[i,j] for i, j in m.Arcs)
+        obj_ -= sum(m.Piset[i]**2*m.fs_slack[i] for i in m.slack_nodes)
+        return obj_
 
     m.Obj = Objective(rule=obj, sense=minimize)
 
     return m
 
+def pressure_mdl():
+    m = AbstractModel()
+    m.Nodes = Set()
+    m.Arcs = Set(dimen=2)
+    m.slack_nodes = Set()
+
+    def NodesIn_init(m, node):
+        for i, j in m.Arcs:
+            if j == node:
+                yield i
+
+    m.NodesIn = Set(m.Nodes, initialize=NodesIn_init)
+
+    def NodesOut_init(m, node):
+        for i, j in m.Arcs:
+            if i == node:
+                yield j
+
+    m.NodesOut = Set(m.Nodes, initialize=NodesOut_init)
+
+    m.f = Param(m.Arcs, domain=Reals)
+    m.c = Param(m.Arcs, mutable=True)
+    m.Piset = Param(m.slack_nodes, mutable=True, domain=Reals)
+    m.Pi2 = Var(m.Nodes, domain=PositiveReals)
+    m.delta = Param(m.Arcs, domain=Reals)
+
+    def f_pi_rule(m, i, j):
+        return m.c[i, j] * m.f[i, j] ** 2 * abs(m.f[i, j]) == m.delta[i, j] + m.Pi2[i] - m.Pi2[j]
+
+    m.f_pi = Constraint(m.Arcs, rule=f_pi_rule)
+
+    def pi_rule(m, node):
+        return m.Pi2[node] - m.Piset[node]**2 ==0
+    m.m_balance1 = Constraint(m.slack_nodes, rule=pi_rule)
+
+    def obj(m):
+        obj_ = m.Pi2[0]
+        return obj_
+
+    m.Obj = Objective(rule=obj, sense=minimize)
+
+    return m
 
 def ae_pi(f, gc):
     """
@@ -66,16 +124,27 @@ def ae_pi(f, gc):
         fnode = edge[0]
         tnode = edge[1]
         idx = edge[2]['idx']
-        pi = m.p_square[fnode]
-        pj = m.p_square[tnode]
-        fij = m.f[idx]
-        rhs = m.c[idx] * fij ** 2*Sign(fij) - (pi - pj)
+        if len(gc['pinloop']) > 0:
+            # if there exists loop, omit the last pipe in the loop
+            if idx != gc['pinloop'][-1]:
+                pi = m.p_square[fnode]
+                pj = m.p_square[tnode]
+                fij = m.f[idx]
+                rhs = m.c[idx] * fij ** 2 * Sign(fij) - (pi - pj)
+                m.__dict__[f'p_q_{fnode}_{tnode}'] = Eqn(f"p_f_{fnode}_{tnode}", rhs)
+        else:
+            pi = m.p_square[fnode]
+            pj = m.p_square[tnode]
+            fij = m.f[idx]
+            rhs = m.c[idx] * fij ** 2*Sign(fij) - (pi - pj)
         m.__dict__[f'p_q_{fnode}_{tnode}'] = Eqn(f"p_f_{fnode}_{tnode}", rhs)
 
-    # node pressure
-    for node in gc['slack']:
+    # node pressure equations
+    # for multi-slack cases, preserve only the first one, so that the equations would not be overdetermined
+    for node in gc['slack'][0:1]:
+        idx_slack = gc['slack'].tolist().index(node)
         m.__dict__[f'pressure_{node}'] = Eqn(f'pressure_{node}',
-                                             m.p_square[node] - m.Pi_slack ** 2)
+                                             m.p_square[node] - m.Pi_slack[idx_slack] ** 2)
 
     sae, y0 = m.create_instance()
     ae = made_numerical(sae, y0, sparse=True)
@@ -89,6 +158,7 @@ class GasFlow:
                  file: str):
         self.gc = load_ngs(file)
         self.gas_mdl = gas_flow_mdl()
+        self.pi_mdl = pressure_mdl()
         self.results = None
         self.f = np.zeros(self.gc['n_pipe'])
         self.Pi = np.zeros(self.gc['n_node'])
@@ -100,17 +170,25 @@ class GasFlow:
     def run(self, tee=True):
 
         arcs = [(i, j) for i, j in zip(self.gc['pipe_from'], self.gc['pipe_to'])]
+        nodes = np.arange(self.gc['n_node'])
+        slack_nodes = self.gc['slack']
+        non_slack_nodes = self.gc['non_slack_node']
         c = dict(zip(arcs, self.gc['C']))
-        minset = np.zeros(self.gc['n_node'])
-        minset[self.gc['non_slack_node']] = self.gc['non_slack_fin_set']
-        minset = dict(zip(np.arange(self.gc['n_node']), minset))
+        fs = dict(zip(nodes, self.gc['fs']))
+        fl = dict(zip(nodes, self.gc['fl']))
+        Piset = dict(zip(slack_nodes, self.Pi_slack))
+        delta = dict(zip(arcs, self.gc['delta']))
         data_dict = {
             None: {
-                'Nodes': {None: np.arange(self.gc['n_node'])},
-                'non_slack_nodes': {None: self.gc['non_slack_node']},
+                'Nodes': {None: nodes},
+                'slack_nodes': {None: slack_nodes},
+                'non_slack_nodes': {None: non_slack_nodes},
                 'Arcs': {None: arcs},
-                'minset': minset,
-                'c': c
+                'fs': fs,
+                'fl': fl,
+                'c': c,
+                'Piset': Piset,
+                'delta': delta
             }
         }
 
@@ -133,6 +211,7 @@ class GasFlow:
         self.ae.p['c'] = self.gc['C']
         self.ae.p['Pi_slack'] = self.gc['Pi'][self.gc['slack']]
         sol = nr_method(self.ae, self.y0)
+        self.Pi_square = sol.y['p_square']
         self.Pi = sol.y['p_square'] ** (1 / 2)
 
     def output_results(self, file):
@@ -170,7 +249,7 @@ def mdl_ngs(gc, module_name, jit=True):
     minset[gc['non_slack_node']] = gc['non_slack_fin_set']
     m.minset = SolParam('minset', minset)
     m.c = SolParam('c', gc['C'])
-    m.Pi_slack = SolParam('Pi_slack', gc['Pi'][gc['slack']])
+    m.Piset = SolParam('Piset', gc['Pi'])
 
     # mass flow continuity
     for node in gc['non_slack_node']:
@@ -198,7 +277,7 @@ def mdl_ngs(gc, module_name, jit=True):
 
     # node pressure
     for node in gc['slack']:
-        m.__dict__[f'pressure_{node}'] = Eqn(f'pressure_{node}', m.Pi[node] - m.Pi_slack)
+        m.__dict__[f'pressure_{node}'] = Eqn(f'pressure_{node}', m.Pi[node] - m.Piset[node])
 
     # %% create instance
     gas, y0 = m.create_instance()
