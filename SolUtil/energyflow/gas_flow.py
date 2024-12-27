@@ -8,9 +8,6 @@ from pyomo.environ import (Reals, Var, AbstractModel, Set, Param, Constraint, mi
 from Solverz import Var as SolVar, Param as SolParam, Eqn, Model, made_numerical, nr_method, module_printer, Sign
 import numpy as np
 import pandas as pd
-import networkx as nx
-from scipy.sparse.linalg import lsqr
-from copy import deepcopy
 from ..sysparser import load_ngs
 
 __all__ = ['GasFlow', 'mdl_ngs']
@@ -51,7 +48,6 @@ def gas_flow_mdl():
 
     m.m_balance1 = Constraint(m.slack_nodes, rule=m_continuity_rule1)
 
-
     def m_continuity_rule2(m, node):
         return m.fl[node] - m.fs[node] == sum(m.f[i, node] for i in m.NodesIn[node]) - sum(
             m.f[node, j] for j in m.NodesOut[node])
@@ -59,13 +55,14 @@ def gas_flow_mdl():
     m.m_balance2 = Constraint(m.non_slack_nodes, rule=m_continuity_rule2)
 
     def obj(m):
-        obj_ = sum(m.c[i, j] * abs(m.f[i, j]) ** 3 / 3 - m.delta[i,j]*m.f[i,j] for i, j in m.Arcs)
-        obj_ -= sum(m.Piset[i]**2*m.fs_slack[i] for i in m.slack_nodes)
+        obj_ = sum(m.c[i, j] * abs(m.f[i, j]) ** 3 / 3 - m.delta[i, j] * m.f[i, j] for i, j in m.Arcs)
+        obj_ -= sum(m.Piset[i] ** 2 * m.fs_slack[i] for i in m.slack_nodes)
         return obj_
 
     m.Obj = Objective(rule=obj, sense=minimize)
 
     return m
+
 
 def pressure_mdl():
     m = AbstractModel()
@@ -99,7 +96,8 @@ def pressure_mdl():
     m.f_pi = Constraint(m.Arcs, rule=f_pi_rule)
 
     def pi_rule(m, node):
-        return m.Pi2[node] - m.Piset[node]**2 ==0
+        return m.Pi2[node] - m.Piset[node] ** 2 == 0
+
     m.m_balance1 = Constraint(m.slack_nodes, rule=pi_rule)
 
     def obj(m):
@@ -109,6 +107,7 @@ def pressure_mdl():
     m.Obj = Objective(rule=obj, sense=minimize)
 
     return m
+
 
 def ae_pi(f, gc):
     """
@@ -136,7 +135,7 @@ def ae_pi(f, gc):
             pi = m.p_square[fnode]
             pj = m.p_square[tnode]
             fij = m.f[idx]
-            rhs = m.c[idx] * fij ** 2*Sign(fij) - (pi - pj)
+            rhs = m.c[idx] * fij ** 2 * Sign(fij) - (pi - pj)
         m.__dict__[f'p_q_{fnode}_{tnode}'] = Eqn(f"p_f_{fnode}_{tnode}", rhs)
 
     # node pressure equations
