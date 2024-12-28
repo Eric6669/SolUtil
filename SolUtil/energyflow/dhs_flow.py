@@ -55,7 +55,6 @@ class DhsFlow:
                  file: str):
         self.Toutr = None
         self.Touts = None
-        self.phi_slack = None
         self.Tr = None
         self.phi = None
         self.slack_node = None
@@ -82,10 +81,29 @@ class DhsFlow:
         self.tempmdl, self.ty0 = mdl_temp(self.hc)
         self.heatmdl, self.hy0 = inline_dhs_mdl(self.hc)
 
+        arcs = [(i, j) for i, j in zip(self.pipe_from, self.pipe_to)]
+        nodes = np.arange(self.n_node)
+        non_slack_nodes = self.non_slack_node
+        K = dict(zip(arcs, self.K))
+        minset = dict(zip(nodes, self.minset))
+        data_dict = {
+            None: {
+                'Nodes': {None: nodes},
+                'non_slack_nodes': {None: non_slack_nodes},
+                'Arcs': {None: arcs},
+                'K': K,
+                'minset': minset
+            }
+        }
+
+        # print("Creating optimization model instance!")
+        self.chydrmdl = self.hydraulic_mdl.create_instance(data_dict)
+
     def run(self, tee=True):
         """
         Run heat flow based on IPOPT
         """
+        self.run_succeed = False
         done = False
         Tsource = (self.Tsource - self.Ta) * np.ones(self.n_node)
         Tload = (self.Tload - self.Ta) * np.ones(self.n_node)
@@ -101,23 +119,9 @@ class DhsFlow:
             minset[self.s_node.tolist() + self.slack_node.tolist()] = - minset[
                 self.s_node.tolist() + self.slack_node.tolist()]
 
-            arcs = [(i, j) for i, j in zip(self.pipe_from, self.pipe_to)]
-            nodes = np.arange(self.n_node)
-            non_slack_nodes = self.non_slack_node
-            K = dict(zip(arcs, self.K))
-            minset = dict(zip(nodes, minset))
-            data_dict = {
-                None: {
-                    'Nodes': {None: nodes},
-                    'non_slack_nodes': {None: non_slack_nodes},
-                    'Arcs': {None: arcs},
-                    'K': K,
-                    'minset': minset
-                }
-            }
+            for i in range(self.n_node):
+                self.chydrmdl.minset[i].value = minset[i]
 
-            # print("Creating optimization model instance!")
-            self.chydrmdl = self.hydraulic_mdl.create_instance(data_dict)
             opt = SolverFactory('ipopt')
             self.hyd_res = opt.solve(self.chydrmdl, tee=tee)
 
@@ -134,6 +138,7 @@ class DhsFlow:
             self.tempmdl.p['min'] = minset
             tsol = nr_method(self.tempmdl, self.ty0)
             if not tsol.stats.succeed:
+                print("Temperature not found")
                 break
 
             Ts = tsol.y['Ts']
@@ -149,6 +154,7 @@ class DhsFlow:
             self.hy0['Toutr'] = Toutr
             self.hy0['phi_slack'] = (4182 * abs(self.hy0['min'][self.slack_node]) *
                                      (Tsource[self.slack_node] - Tr[self.slack_node]) / 1e6)
+            self.heatmdl.p['phi'] = phi
             F = self.heatmdl.F(self.hy0, self.heatmdl.p)
             dF = np.max(np.abs(F))
             if dF < 1e-5:
@@ -158,13 +164,16 @@ class DhsFlow:
                 done = True
                 self.run_succeed = False
 
-        self.Ts = Ts + self.Ta
-        self.Tr = Tr + self.Ta
-        self.m = m
-        self.minset = minset
-        self.phi_slack = self.hy0['phi_slack']
-        self.Touts = Touts + self.Ta
-        self.Toutr = Toutr + self.Ta
+        if self.run_succeed:
+            self.Ts = Ts + self.Ta
+            self.Tr = Tr + self.Ta
+            self.m = m
+            self.minset = minset
+            self.phi[self.slack_node] = self.hy0['phi_slack']
+            self.Touts = Touts + self.Ta
+            self.Toutr = Toutr + self.Ta
+        else:
+            print("Solution not found")
 
 
 def mdl_temp(hc):
