@@ -7,16 +7,164 @@ from Solverz import Var as SolVar, Param as SolParam, Eqn, Model, made_numerical
 from SolUtil.sysparser import load_hs
 import numpy as np
 import pandas as pd
-from ..sysparser import load_ngs
 
-__all__ = ["DhsFlow", "mdl_dhs"]
+__all__ = ["DhsFlow", "generate_dhs_module"]
+
+
+def heat_hydraulic():
+    m = AbstractModel()
+    m.Nodes = Set()
+    m.Arcs = Set(dimen=2)
+    m.non_slack_nodes = Set()
+
+    def NodesIn_init(m, node):
+        for i, j in m.Arcs:
+            if j == node:
+                yield i
+
+    m.NodesIn = Set(m.Nodes, initialize=NodesIn_init)
+
+    def NodesOut_init(m, node):
+        for i, j in m.Arcs:
+            if i == node:
+                yield j
+
+    m.NodesOut = Set(m.Nodes, initialize=NodesOut_init)
+
+    m.m = Var(m.Arcs, domain=Reals)
+    m.K = Param(m.Arcs)
+    m.minset = Param(m.Nodes, mutable=True)
+
+    def m_continuity_rule(m, node):
+        return m.minset[node] == sum(m.m[i, node] for i in m.NodesIn[node]) - sum(
+            m.m[node, j] for j in m.NodesOut[node])
+
+    m.m_balance = Constraint(m.non_slack_nodes, rule=m_continuity_rule)
+
+    def obj(m):
+        return sum(m.K[i, j] * abs(m.m[i, j]) ** 3 / 3 for i, j in m.Arcs)
+
+    m.Obj = Objective(rule=obj, sense=minimize)
+
+    return m
 
 
 class DhsFlow:
 
     def __init__(self,
                  file: str):
+        self.Toutr = None
+        self.Touts = None
+        self.phi_slack = None
+        self.Tr = None
+        self.phi = None
+        self.slack_node = None
+        self.A = None
+        self.Ci = None
+        self.n_node = None
+        self.n_pipe = None
+        self.Ta = None
+        self.Tload = None
+        self.Ts = None
+        self.Cl = None
+        self.Cs = None
+        self.Tsource = None
         self.hc = load_hs(file)
+        self.__dict__.update(self.hc)
+        self.hydraulic_mdl = heat_hydraulic()
+        self.chydrmdl = None
+        self.hyd_res = None
+        self.m = np.zeros(self.n_pipe)
+        self.minset = np.zeros(self.n_node)
+        self.run_succeed = False
+
+        # print("Creating pf model of node pressure!")
+        self.tempmdl, self.ty0 = mdl_temp(self.hc)
+        self.heatmdl, self.hy0 = inline_dhs_mdl(self.hc)
+
+    def run(self, tee=True):
+        """
+        Run heat flow based on IPOPT
+        """
+        done = False
+        Tsource = (self.Tsource - self.Ta) * np.ones(self.n_node)
+        Tload = (self.Tload - self.Ta) * np.ones(self.n_node)
+        Ts = np.ones(self.n_node) * Tsource
+        Tr = np.ones(self.n_node) * Tload
+        nt = 0
+        while not done:
+            nt += 1
+            phi = self.phi
+            dT = np.sum(self.Cs, axis=0) * Tsource + (self.Cl + self.Ci) @ Ts \
+                 - (self.Ci + self.Cs) @ Tr - np.sum(self.Cl, axis=0) * Tload
+            minset = phi * 1e6 / (4182 * dT)
+            minset[self.s_node.tolist() + self.slack_node.tolist()] = - minset[
+                self.s_node.tolist() + self.slack_node.tolist()]
+
+            arcs = [(i, j) for i, j in zip(self.pipe_from, self.pipe_to)]
+            nodes = np.arange(self.n_node)
+            non_slack_nodes = self.non_slack_node
+            K = dict(zip(arcs, self.K))
+            minset = dict(zip(nodes, minset))
+            data_dict = {
+                None: {
+                    'Nodes': {None: nodes},
+                    'non_slack_nodes': {None: non_slack_nodes},
+                    'Arcs': {None: arcs},
+                    'K': K,
+                    'minset': minset
+                }
+            }
+
+            # print("Creating optimization model instance!")
+            self.chydrmdl = self.hydraulic_mdl.create_instance(data_dict)
+            opt = SolverFactory('ipopt')
+            self.hyd_res = opt.solve(self.chydrmdl, tee=tee)
+
+            if self.hyd_res.solver.status == 'ok' and tee:
+                print('Solution found')
+
+            m = []
+            for i, j in self.chydrmdl.Arcs:
+                m.append(self.chydrmdl.m[i, j].value)
+            m = np.array(m)
+
+            self.tempmdl.p['m'] = m
+            minset = self.A @ m
+            self.tempmdl.p['min'] = minset
+            tsol = nr_method(self.tempmdl, self.ty0)
+            if not tsol.stats.succeed:
+                break
+
+            Ts = tsol.y['Ts']
+            Tr = tsol.y['Tr']
+            Touts = tsol.y['Touts']
+            Toutr = tsol.y['Toutr']
+
+            self.hy0['m'] = m
+            self.hy0['min'] = minset
+            self.hy0['Ts'] = Ts
+            self.hy0['Tr'] = Tr
+            self.hy0['Touts'] = Touts
+            self.hy0['Toutr'] = Toutr
+            self.hy0['phi_slack'] = (4182 * abs(self.hy0['min'][self.slack_node]) *
+                                     (Tsource[self.slack_node] - Tr[self.slack_node]) / 1e6)
+            F = self.heatmdl.F(self.hy0, self.heatmdl.p)
+            dF = np.max(np.abs(F))
+            if dF < 1e-5:
+                done = True
+                self.run_succeed = True
+            if nt > 100:
+                done = True
+                self.run_succeed = False
+
+        self.Ts = Ts + self.Ta
+        self.Tr = Tr + self.Ta
+        self.m = m
+        self.minset = minset
+        self.phi_slack = self.hy0['phi_slack']
+        self.Touts = Touts + self.Ta
+        self.Toutr = Toutr + self.Ta
 
 
 def mdl_temp(hc):
@@ -48,13 +196,13 @@ def mdl_temp(hc):
 
         for edge in hc['G'].in_edges(node, data=True):
             pipe = edge[2]['idx']
-            lhs += heaviside(m.m[pipe]) * m.m[pipe]
-            rhs += heaviside(m.m[pipe]) * (m.Touts[pipe] * m.m[pipe])
+            lhs += heaviside(m.m[pipe]) * Abs(m.m[pipe])
+            rhs += heaviside(m.m[pipe]) * (m.Touts[pipe] * Abs(m.m[pipe]))
 
         for edge in hc['G'].out_edges(node, data=True):
             pipe = edge[2]['idx']
-            lhs += (1 - heaviside(m.m[pipe])) * m.m[pipe]
-            rhs += (1 - heaviside(m.m[pipe])) * (m.Touts[pipe] * m.m[pipe])
+            lhs += (1 - heaviside(m.m[pipe])) * Abs(m.m[pipe])
+            rhs += (1 - heaviside(m.m[pipe])) * (m.Touts[pipe] * Abs(m.m[pipe]))
 
         lhs *= m.Ts[node]
 
@@ -101,7 +249,7 @@ def mdl_temp(hc):
     return ntemp, y0
 
 
-def mdl_dhs(hc, module_name, jit=True):
+def mdl_dhs(hc):
     """
     Full DHS model using Solverz
     """
@@ -137,9 +285,8 @@ def mdl_dhs(hc, module_name, jit=True):
     m.K = SolParam('K', hc['K'])
     rhs = 0
     if len(hc['pinloop']) > 0:
-        for pipe in hc['pinloop']:
-            i = np.abs(pipe)
-            rhs += m.K[i] * m.m[i] ** 2 * Sign(m.m[i])
+        for i in range(hc['n_pipe']):
+            rhs += m.K[i] * m.m[i] ** 2 * Sign(m.m[i]) * hc['pinloop'][i]
         m.loop_pressure = Eqn("loop_pressure", rhs)
 
     # Supply temperature
@@ -218,6 +365,17 @@ def mdl_dhs(hc, module_name, jit=True):
         m.__dict__[f'phi_{node}'] = Eqn(f"phi_{node}", rhs)
 
     heat, y0 = m.create_instance()
+    return heat, y0
+
+
+def inline_dhs_mdl(hc):
+    heat, y0 = mdl_dhs(hc)
+    nheat = made_numerical(heat, y0, sparse=True)
+    return nheat, y0
+
+
+def generate_dhs_module(hc, module_name, jit=True):
+    heat, y0 = mdl_dhs(hc)
     pyprinter = module_printer(heat,
                                y0,
                                module_name,

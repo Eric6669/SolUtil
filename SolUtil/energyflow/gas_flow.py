@@ -157,7 +157,7 @@ class GasFlow:
                  file: str):
         self.gc = load_ngs(file)
         self.gas_mdl = gas_flow_mdl()
-        self.pi_mdl = pressure_mdl()
+        # self.pi_mdl = pressure_mdl()
         self.results = None
         self.f = np.zeros(self.gc['n_pipe'])
         self.Pi = np.zeros(self.gc['n_node'])

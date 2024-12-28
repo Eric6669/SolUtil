@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import networkx as nx
+from scipy.sparse import csc_array
 
 
 def load_hs(filename):
@@ -31,12 +32,12 @@ def load_hs(filename):
     n_node = len(df['node'])
     hc['n_node'] = n_node
     hc['n_pipe'] = len(df['pipe'])
+    non_slack_node = np.setdiff1d(np.arange(n_node), slack_node)
+    hc['non_slack_node'] = non_slack_node
 
     # loop detection and conversion
     if 'loop' in df:
-        pipe_in_loop = df['loop']['loop1'] == 1
-        pinloop = np.asarray(df['loop'][pipe_in_loop]['idx'])
-        hc['pinloop'] = pinloop.tolist()
+        hc['pinloop'] = np.asarray(df['loop']['loop1'])
     else:
         hc['pinloop'] = []
 
@@ -113,7 +114,21 @@ def load_hs(filename):
     hc['L'] = L
     hc['S'] = S
     hc['Ta'] = np.asarray(df['setting']['Ta'])
+    hc['Tsource'] = np.asarray(df['setting']['Tsource'])
+    hc['Tload'] = np.asarray(df['setting']['Tload'])
     hc['phi'] = np.asarray(df['node']['phi (MW)'])
+
+    s_slack_node = s_node.tolist() + slack_node.tolist()
+    Cs = csc_array((np.ones(len(s_slack_node)), (s_slack_node, s_slack_node)),
+                   shape=(hc['n_node'], hc['n_node']))
+    Cl = csc_array((np.ones(len(hc['l_node'])), (hc['l_node'], hc['l_node'])),
+                   shape=(hc['n_node'], hc['n_node']))
+    Ci = csc_array((np.ones(len(hc['I_node'])), (hc['I_node'], hc['I_node'])),
+                   shape=(hc['n_node'], hc['n_node']))
+    hc['Cs'] = Cs
+    hc['Cl'] = Cl
+    hc['Ci'] = Ci
+
     return hc
 
 
