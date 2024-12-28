@@ -8,7 +8,7 @@ from SolUtil.sysparser import load_hs
 import numpy as np
 import pandas as pd
 
-__all__ = ["DhsFlow", "generate_dhs_module"]
+__all__ = ["DhsFlow", "generate_dhs_module", "generate_temp_module"]
 
 
 def heat_hydraulic():
@@ -52,7 +52,10 @@ def heat_hydraulic():
 class DhsFlow:
 
     def __init__(self,
-                 file: str):
+                 file: str,
+                 heatmdl=None,
+                 tempmdl=None):
+
         self.Toutr = None
         self.Touts = None
         self.Tr = None
@@ -78,8 +81,16 @@ class DhsFlow:
         self.run_succeed = False
 
         # print("Creating pf model of node pressure!")
-        self.tempmdl, self.ty0 = mdl_temp(self.hc)
-        self.heatmdl, self.hy0 = inline_dhs_mdl(self.hc)
+        if heatmdl is None:
+            self.heatmdl, self.hy0 = inline_dhs_mdl(self.hc)
+        else:
+            self.heatmdl = heatmdl['mdl']
+            self.hy0 = heatmdl['y0']
+        if tempmdl is None:
+            self.tempmdl, self.ty0 = mdl_temp(self.hc)
+        else:
+            self.tempmdl = tempmdl['mdl']
+            self.ty0 = tempmdl['y0']
 
         arcs = [(i, j) for i, j in zip(self.pipe_from, self.pipe_to)]
         nodes = np.arange(self.n_node)
@@ -254,8 +265,7 @@ def mdl_temp(hc):
         m.__dict__[f"Toutr_{pipe}"] = Eqn(f"Toutr_{pipe}", rhs)
 
     temp, y0 = m.create_instance()
-    ntemp, code = made_numerical(temp, y0, sparse=True, output_code=True)
-    return ntemp, y0
+    return temp, y0
 
 
 def mdl_dhs(hc):
@@ -382,10 +392,22 @@ def inline_dhs_mdl(hc):
     nheat = made_numerical(heat, y0, sparse=True)
     return nheat, y0
 
+def inline_temp_mdl(hc):
+    temp, y0 = mdl_temp(hc)
+    ntemp = made_numerical(temp, y0, sparse=True)
+    return ntemp, y0
 
 def generate_dhs_module(hc, module_name, jit=True):
     heat, y0 = mdl_dhs(hc)
     pyprinter = module_printer(heat,
+                               y0,
+                               module_name,
+                               jit=jit)
+    pyprinter.render()
+
+def generate_temp_module(hc, module_name, jit=True):
+    temp, y0 = mdl_temp(hc)
+    pyprinter = module_printer(temp,
                                y0,
                                module_name,
                                jit=jit)
