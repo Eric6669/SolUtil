@@ -87,7 +87,7 @@ class DhsFlow:
             self.heatmdl = heatmdl['mdl']
             self.hy0 = heatmdl['y0']
         if tempmdl is None:
-            self.tempmdl, self.ty0 = mdl_temp(self.hc)
+            self.tempmdl, self.ty0 = inline_temp_mdl(self.hc)
         else:
             self.tempmdl = tempmdl['mdl']
             self.ty0 = tempmdl['y0']
