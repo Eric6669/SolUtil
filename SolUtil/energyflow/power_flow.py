@@ -27,9 +27,13 @@ class PowerFlow:
         self.idx_pv = None
         self.idx_pq = None
         self.sol = None
+        self.baseMVA = None
 
         self.mpc = load_mpc(file)
         self.__dict__.update(self.mpc)
+        self.Gbus = self.Ybus.real
+        self.Bbus = self.Ybus.imag
+
         self.run_succeed = False
 
         if mdl is None:

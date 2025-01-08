@@ -162,6 +162,8 @@ class GasFlow:
         self.f = np.zeros(self.gc['n_pipe'])
         self.Pi = np.zeros(self.gc['n_node'])
         self.Pi_slack = self.gc['Pi'][self.gc['slack']]
+        self.fs = self.gc['fs']
+        self.fl = self.gc['fl']
 
         # print("Creating pf model of node pressure!")
         self.ae, self.y0 = ae_pi(self.f, self.gc)
@@ -205,6 +207,7 @@ class GasFlow:
 
         self.f = np.array(self.f)
         self.fin = self.gc['A'] @ self.f
+        self.fs = - self.fin + self.fl
 
         self.ae.p['f'] = self.f
         self.ae.p['c'] = self.gc['C']

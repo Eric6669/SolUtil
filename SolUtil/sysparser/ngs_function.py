@@ -1,8 +1,7 @@
-import numpy as np
-from scipy.interpolate import make_interp_spline, interp1d
-import pandas as pd
-import networkx as nx
 import matplotlib.pyplot as plt
+import networkx as nx
+import numpy as np
+import pandas as pd
 
 
 def visualize_ngs(G: nx.DiGraph):
@@ -159,78 +158,4 @@ def load_P2G(filename):
         p2gc[column_name] = np.asarray(df['P2G'][column_name])
 
     return p2gc
-
-
-def generate_random_curve(T_start, T_end, magnitude, offset, n, y0):
-    if n > 3:
-        yr = magnitude * np.random.rand(n) + offset  # 生成对应的随机y坐标，范围在3000到6500
-        yr[0] = y0
-        x_ = np.linspace(T_start, T_end, n)
-        xs = np.linspace(x_.min(), x_.max(), 300)  # 生成平滑曲线的x坐标
-        spl_ = make_interp_spline(x_, yr, k=3)  # 使用三次样条插值
-        ys = spl_(xs)
-    else:
-        xs = np.linspace(T_start, T_end, 2)
-        ys = np.array([y0, y0])
-
-    ys = np.clip(ys, offset, magnitude + offset)
-    return xs, ys
-
-
-def made_stair(t: np.ndarray, y: np.ndarray, duration):
-    n = int((t[-1] - t[0]) / duration)
-    t0 = t[0]
-    t = t - t0
-    yt = interp1d(t, y, 'linear')
-    ts = 60
-    dt1 = np.tile(np.concatenate([ts / 5 * np.ones((5,)), np.array([duration - ts * 2]), ts / 5 * np.ones((5,))]), (n,))
-    dt1 = np.insert(dt1, 0, 0)
-    t1 = np.cumsum(dt1)
-    y1 = np.zeros_like(t1)
-
-    for i in range(n):
-        ta = i * duration
-        tb = (i + 1) * duration
-        t_argwhere = np.where((ta <= t1) & (t1 <= tb))
-        y1[t_argwhere] = yt(i * duration)
-
-    # smooth the edge
-    for i in range(n - 1):
-        tj = (i + 1) * duration
-        ta = tj - ts
-        tb = tj + ts
-        t_argwhere = np.where((ta <= t1) & (t1 <= tb))
-        temp_t = t1[t_argwhere]
-        a = y1[t_argwhere[0][0] - 1]
-        b = y1[t_argwhere[0][-1] + 1]
-
-        y1[t_argwhere] = (b - a) / 2 * np.sin(np.pi * (temp_t - tj + ts) / (2 * ts) - np.pi / 2) + (a + b) / 2
-
-    return t1 + t0, y1
-
-
-def made_stair1(t: np.ndarray, y: np.ndarray, duration):
-    n = int((t[-1] - t[0]) / duration)
-    t0 = t[0]
-    t = t - t0
-    yt = interp1d(t, y, 'linear')
-    ts = 60
-    dt1 = np.tile(np.concatenate([2 * ts / 5 * np.ones((5,)), np.array([duration - 2 * ts])]), (n,))
-    dt1 = np.insert(dt1, 0, 0)
-    t1 = np.cumsum(dt1)
-    y1 = np.zeros_like(t1)
-
-    for i in range(n):
-        ta = i * duration
-        tb = (i + 1) * duration
-        t_argwhere = np.where((ta + 2 * ts <= t1) & (t1 <= tb))
-        y1[t_argwhere] = yt((i + 1) * duration)
-        b = y1[t_argwhere][0]
-        t_argwhere = np.where((ta <= t1) & (t1 <= ta + 2 * ts))
-        temp_t = t1[t_argwhere]
-        a = yt(i * duration)
-        y1[t_argwhere] = (b - a) / 2 * np.sin(np.pi * (temp_t - (temp_t[0] + ts) + ts) / (2 * ts) - np.pi / 2) + (
-                a + b) / 2
-
-    return t1 + t0, y1
 
