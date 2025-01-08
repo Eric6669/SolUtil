@@ -392,10 +392,12 @@ def inline_dhs_mdl(hc):
     nheat = made_numerical(heat, y0, sparse=True)
     return nheat, y0
 
+
 def inline_temp_mdl(hc):
     temp, y0 = mdl_temp(hc)
     ntemp = made_numerical(temp, y0, sparse=True)
     return ntemp, y0
+
 
 def generate_dhs_module(hc, module_name, jit=True):
     heat, y0 = mdl_dhs(hc)
@@ -404,6 +406,7 @@ def generate_dhs_module(hc, module_name, jit=True):
                                module_name,
                                jit=jit)
     pyprinter.render()
+
 
 def generate_temp_module(hc, module_name, jit=True):
     temp, y0 = mdl_temp(hc)
