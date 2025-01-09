@@ -71,6 +71,17 @@ class DhsFlow:
         self.Cl = None
         self.Cs = None
         self.Tsource = None
+        self.L = None
+        self.lam = None
+        self.pipe_from = None
+        self.pipe_to = None
+        self.G = None
+        self.s_node = None
+        self.l_node = None
+        self.I_node = None
+        self.pinloop = []
+        self.K = None
+        self.S = None
         self.hc = load_hs(file)
         self.__dict__.update(self.hc)
         self.hydraulic_mdl = heat_hydraulic()
