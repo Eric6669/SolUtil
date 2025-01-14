@@ -53,7 +53,6 @@ def load_ngs(filename):
     slack_cond = df['node']['type'] == 3
     slack_node = np.asarray(df['node'][slack_cond]['idx'])
     non_slack_source_node = np.setdiff1d(s_node, slack_node)
-    non_slack_cond = df['node']['type'] != 3
     non_slack_node = np.setdiff1d(np.arange(len(df['node'])), slack_node)
     gc['slack'] = slack_node
     gc['n_slack'] = len(slack_node)
@@ -112,9 +111,7 @@ def load_ngs(filename):
     lam = np.asarray(df['pipe']['Friction'])
     D = np.asarray(df['pipe']['Diameter'])
     Pi = np.array(df['node']['p'])
-    finset = np.array(df['node'][ns_node_cond]['q'])
-    non_slack_fin_set = np.array(df['node'][non_slack_cond]['q'])
-    Piset = np.array(df['node'][s_node_cond]['p'])
+    Piset = np.array(df['node'][slack_cond]['p'])
     L = np.asarray(df['pipe']['Length'])
     va = 340
     S = np.pi * (D / 2) ** 2
@@ -122,8 +119,6 @@ def load_ngs(filename):
     gc['lam'] = lam
     gc['D'] = D
     gc['Pi'] = Pi
-    gc['finset'] = finset
-    gc['non_slack_fin_set'] = non_slack_fin_set
     gc['Piset'] = Piset
     gc['L'] = L
     gc['va'] = va

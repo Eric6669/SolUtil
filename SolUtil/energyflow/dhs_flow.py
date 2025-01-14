@@ -53,8 +53,18 @@ class DhsFlow:
 
     def __init__(self,
                  file: str,
+                 symmetric_hydraulic: bool = True,
                  heatmdl=None,
                  tempmdl=None):
+        """
+        Parameter
+        ---------
+
+        symmetric_hydraulic :
+
+            If True, assume that the supply and return hydraulics, apart from the directions, are the same.
+
+        """
 
         self.Toutr = None
         self.Touts = None
@@ -82,9 +92,14 @@ class DhsFlow:
         self.pinloop = []
         self.K = None
         self.S = None
+        self.delta_node = None
+        self.delta_pipe = None
         self.hc = load_hs(file)
         self.__dict__.update(self.hc)
-        self.hydraulic_mdl = heat_hydraulic()
+        if symmetric_hydraulic:
+            self.hydraulic_mdl = heat_hydraulic()
+        else:
+            self.hydraulic_mdl = 1
         self.chydrmdl = None
         self.hyd_res = None
         self.m = np.zeros(self.n_pipe)

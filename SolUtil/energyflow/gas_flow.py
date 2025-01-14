@@ -155,6 +155,16 @@ class GasFlow:
 
     def __init__(self,
                  file: str):
+        self.Pi_square = None
+        self.delta = None
+        self.C = None
+        self.non_slack_node = None
+        self.slack = None
+        self.n_node = None
+        self.n_pipe = None
+        self.pipe_to = None
+        self.pipe_from = None
+        self.fin = None
         self.gc = load_ngs(file)
         self.gas_mdl = gas_flow_mdl()
         # self.pi_mdl = pressure_mdl()
@@ -171,15 +181,15 @@ class GasFlow:
 
     def run(self, tee=True):
 
-        arcs = [(i, j) for i, j in zip(self.gc['pipe_from'], self.gc['pipe_to'])]
-        nodes = np.arange(self.gc['n_node'])
-        slack_nodes = self.gc['slack']
-        non_slack_nodes = self.gc['non_slack_node']
-        c = dict(zip(arcs, self.gc['C']))
-        fs = dict(zip(nodes, self.gc['fs']))
-        fl = dict(zip(nodes, self.gc['fl']))
+        arcs = [(i, j) for i, j in zip(self.pipe_from, self.pipe_to)]
+        nodes = np.arange(self.n_node)
+        slack_nodes = self.slack
+        non_slack_nodes = self.non_slack_node
+        c = dict(zip(arcs, self.C))
+        fs = dict(zip(nodes, self.fs))
+        fl = dict(zip(nodes, self.fl))
         Piset = dict(zip(slack_nodes, self.Pi_slack))
-        delta = dict(zip(arcs, self.gc['delta']))
+        delta = dict(zip(arcs, self.delta))
         data_dict = {
             None: {
                 'Nodes': {None: nodes},
@@ -207,12 +217,12 @@ class GasFlow:
             self.f.append(self.cgmdl.f[i, j].value)
 
         self.f = np.array(self.f)
-        self.fin = self.gc['A'] @ self.f
+        self.fin = self.A @ self.f
         self.fs = - self.fin + self.fl
 
         self.ae.p['f'] = self.f
-        self.ae.p['c'] = self.gc['C']
-        self.ae.p['Pi_slack'] = self.gc['Pi'][self.gc['slack']]
+        self.ae.p['c'] = self.C
+        self.ae.p['Pi_slack'] = self.Pi[self.slack]
         sol = nr_method(self.ae, self.y0)
         self.Pi_square = sol.y['p_square']
         self.Pi = sol.y['p_square'] ** (1 / 2)

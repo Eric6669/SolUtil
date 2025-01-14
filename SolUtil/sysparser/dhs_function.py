@@ -31,9 +31,22 @@ def load_hs(filename):
     hc['slack_node'] = slack_node
     n_node = len(df['node'])
     hc['n_node'] = n_node
-    hc['n_pipe'] = len(df['pipe'])
+    n_pipe = len(df['pipe'])
+    hc['n_pipe'] = n_pipe
     non_slack_node = np.setdiff1d(np.arange(n_node), slack_node)
     hc['non_slack_node'] = non_slack_node
+
+    if 'delta' in df['node'].columns:
+        delta_node = np.asarray(df['node']['delta'])
+    else:
+        delta_node = np.zeros(n_node)
+    hc['delta_node'] = delta_node
+
+    if 'delta' in df['pipe'].columns:
+        delta_pipe = np.asarray(df['pipe']['delta'])
+    else:
+        delta_pipe = np.zeros(n_pipe)
+    hc['delta_pipe'] = delta_pipe
 
     # loop detection and conversion
     if 'loop' in df:

@@ -2,3 +2,5 @@
 /.idea
 /SolUtil.egg-info
 SolUtil/_version.py
+*.pyc
+/SolUtil/energyflow/test/__pycache__
