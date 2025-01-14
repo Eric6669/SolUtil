@@ -33,8 +33,8 @@ def load_hs(filename):
     hc['n_node'] = n_node
     n_pipe = len(df['pipe'])
     hc['n_pipe'] = n_pipe
-    non_slack_node = np.setdiff1d(np.arange(n_node), slack_node)
-    hc['non_slack_node'] = non_slack_node
+    non_slack_nodes = np.setdiff1d(np.arange(n_node), slack_node)
+    hc['non_slack_nodes'] = non_slack_nodes
 
     if 'delta' in df['node'].columns:
         delta_node = np.asarray(df['node']['delta'])
