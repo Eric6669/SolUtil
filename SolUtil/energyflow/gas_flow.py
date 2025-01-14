@@ -9,104 +9,9 @@ from Solverz import Var as SolVar, Param as SolParam, Eqn, Model, made_numerical
 import numpy as np
 import pandas as pd
 from ..sysparser import load_ngs
+from .hydraulic_mdl import hydraulic_opt_mdl
 
 __all__ = ['GasFlow', 'mdl_ngs']
-
-
-def gas_flow_mdl():
-    m = AbstractModel()
-    m.Nodes = Set()
-    m.Arcs = Set(dimen=2)
-    m.slack_nodes = Set()
-    m.non_slack_nodes = Set()
-
-    def NodesIn_init(m, node):
-        for i, j in m.Arcs:
-            if j == node:
-                yield i
-
-    m.NodesIn = Set(m.Nodes, initialize=NodesIn_init)
-
-    def NodesOut_init(m, node):
-        for i, j in m.Arcs:
-            if i == node:
-                yield j
-
-    m.NodesOut = Set(m.Nodes, initialize=NodesOut_init)
-
-    m.f = Var(m.Arcs, domain=Reals)
-    m.c = Param(m.Arcs, mutable=True)
-    m.fs = Param(m.Nodes, mutable=True)
-    m.fs_slack = Var(m.slack_nodes, domain=Reals)
-    m.fl = Param(m.Nodes, mutable=True)
-    m.Piset = Param(m.slack_nodes, mutable=True, domain=Reals)
-    m.delta = Param(m.Arcs, domain=Reals)
-
-    def m_continuity_rule1(m, node):
-        return m.fl[node] - m.fs_slack[node] == sum(m.f[i, node] for i in m.NodesIn[node]) - sum(
-            m.f[node, j] for j in m.NodesOut[node])
-
-    m.m_balance1 = Constraint(m.slack_nodes, rule=m_continuity_rule1)
-
-    def m_continuity_rule2(m, node):
-        return m.fl[node] - m.fs[node] == sum(m.f[i, node] for i in m.NodesIn[node]) - sum(
-            m.f[node, j] for j in m.NodesOut[node])
-
-    m.m_balance2 = Constraint(m.non_slack_nodes, rule=m_continuity_rule2)
-
-    def obj(m):
-        obj_ = sum(m.c[i, j] * abs(m.f[i, j]) ** 3 / 3 - m.delta[i, j] * m.f[i, j] for i, j in m.Arcs)
-        obj_ -= sum(m.Piset[i] ** 2 * m.fs_slack[i] for i in m.slack_nodes)
-        return obj_
-
-    m.Obj = Objective(rule=obj, sense=minimize)
-
-    return m
-
-
-def pressure_mdl():
-    m = AbstractModel()
-    m.Nodes = Set()
-    m.Arcs = Set(dimen=2)
-    m.slack_nodes = Set()
-
-    def NodesIn_init(m, node):
-        for i, j in m.Arcs:
-            if j == node:
-                yield i
-
-    m.NodesIn = Set(m.Nodes, initialize=NodesIn_init)
-
-    def NodesOut_init(m, node):
-        for i, j in m.Arcs:
-            if i == node:
-                yield j
-
-    m.NodesOut = Set(m.Nodes, initialize=NodesOut_init)
-
-    m.f = Param(m.Arcs, domain=Reals)
-    m.c = Param(m.Arcs, mutable=True)
-    m.Piset = Param(m.slack_nodes, mutable=True, domain=Reals)
-    m.Pi2 = Var(m.Nodes, domain=PositiveReals)
-    m.delta = Param(m.Arcs, domain=Reals)
-
-    def f_pi_rule(m, i, j):
-        return m.c[i, j] * m.f[i, j] ** 2 * abs(m.f[i, j]) == m.delta[i, j] + m.Pi2[i] - m.Pi2[j]
-
-    m.f_pi = Constraint(m.Arcs, rule=f_pi_rule)
-
-    def pi_rule(m, node):
-        return m.Pi2[node] - m.Piset[node] ** 2 == 0
-
-    m.m_balance1 = Constraint(m.slack_nodes, rule=pi_rule)
-
-    def obj(m):
-        obj_ = m.Pi2[0]
-        return obj_
-
-    m.Obj = Objective(rule=obj, sense=minimize)
-
-    return m
 
 
 def ae_pi(f, gc):
@@ -166,8 +71,7 @@ class GasFlow:
         self.pipe_from = None
         self.fin = None
         self.gc = load_ngs(file)
-        self.gas_mdl = gas_flow_mdl()
-        # self.pi_mdl = pressure_mdl()
+        self.gas_mdl = hydraulic_opt_mdl(2)
         self.results = None
         self.f = np.zeros(self.gc['n_pipe'])
         self.Pi = np.zeros(self.gc['n_node'])
@@ -188,7 +92,7 @@ class GasFlow:
         c = dict(zip(arcs, self.C))
         fs = dict(zip(nodes, self.fs))
         fl = dict(zip(nodes, self.fl))
-        Piset = dict(zip(slack_nodes, self.Pi_slack))
+        Hset = dict(zip(slack_nodes, self.Pi_slack**2))
         delta = dict(zip(arcs, self.delta))
         data_dict = {
             None: {
@@ -199,7 +103,7 @@ class GasFlow:
                 'fs': fs,
                 'fl': fl,
                 'c': c,
-                'Piset': Piset,
+                'Hset': Hset,
                 'delta': delta
             }
         }
