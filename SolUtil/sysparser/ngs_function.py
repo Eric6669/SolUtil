@@ -61,8 +61,8 @@ def load_ngs(filename):
     n_node = len(df['node'])
     gc['n_node'] = n_node
     gc['n_pipe'] = len(df['pipe'])
-    gc['fs'] = np.asarray(df['node']['fs'])
-    gc['fl'] = np.asarray(df['node']['fl'])
+    gc['fs'] = np.asarray(df['node']['fs'], dtype=np.float64)
+    gc['fl'] = np.asarray(df['node']['fl'], dtype=np.float64)
     gc['delta'] = np.asarray(df['pipe']['delta'])
 
     # loop detection and conversion
@@ -110,7 +110,6 @@ def load_ngs(filename):
 
     lam = np.asarray(df['pipe']['Friction'])
     D = np.asarray(df['pipe']['Diameter'])
-    Pi = np.array(df['node']['p'])
     Piset = np.array(df['node'][slack_cond]['p'])
     L = np.asarray(df['pipe']['Length'])
     va = 340
@@ -118,7 +117,6 @@ def load_ngs(filename):
     C = lam * va ** 2 * L / D / S ** 2 / (1e6 ** 2)
     gc['lam'] = lam
     gc['D'] = D
-    gc['Pi'] = Pi
     gc['Piset'] = Piset
     gc['L'] = L
     gc['va'] = va

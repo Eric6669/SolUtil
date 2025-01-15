@@ -95,8 +95,8 @@ class DhsFlow:
         slack_nodes = self.slack_node
         non_slack_nodes = self.non_slack_nodes
         c = dict(zip(arcs, self.K))
-        fs = dict(zip(nodes, np.zeros((self.n_node, ))))
-        fl = dict(zip(nodes, np.zeros((self.n_node, ))))
+        fs = dict(zip(nodes, np.zeros((self.n_node,))))
+        fl = dict(zip(nodes, np.zeros((self.n_node,))))
         Hset = dict(zip(slack_nodes, self.Hset))
         delta = dict(zip(arcs, self.delta))
         data_dict = {
