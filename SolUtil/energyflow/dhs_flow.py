@@ -7,7 +7,7 @@ from Solverz import Var as SolVar, Param as SolParam, Eqn, Model, made_numerical
 from SolUtil.sysparser import load_hs
 import numpy as np
 import pandas as pd
-from .hydraulic_mdl import hydraulic_opt_mdl
+from .hydraulic_mdl import HydraFlow
 
 __all__ = ["DhsFlow", "generate_dhs_module", "generate_temp_module"]
 
@@ -16,7 +16,6 @@ class DhsFlow:
 
     def __init__(self,
                  file: str,
-                 symmetric_hydraulic: bool = True,
                  heatmdl=None,
                  tempmdl=None):
         """
@@ -60,17 +59,24 @@ class DhsFlow:
         self.delta_pipe = None
         self.hc = load_hs(file)
         self.__dict__.update(self.hc)
-        if symmetric_hydraulic:
-            self.hydraulic_mdl = hydraulic_opt_mdl(2)
-            self.delta = np.zeros(self.n_node)
-            self.Hset = np.zeros_like(self.slack_node)
-        else:
-            self.hydraulic_mdl = hydraulic_opt_mdl(2)
-        self.chydrmdl = None
+        self.delta = np.zeros(self.n_node)
+        self.Hset = np.zeros_like(self.slack_node)
         self.hyd_res = None
         self.m = np.zeros(self.n_pipe)
         self.minset = np.zeros(self.n_node)
         self.run_succeed = False
+
+        self.HydraFlow = HydraFlow(self.pipe_from,
+                                   self.pipe_to,
+                                   self.slack_node,
+                                   self.non_slack_nodes,
+                                   self.K,
+                                   np.zeros(self.n_node),
+                                   np.zeros(self.n_node),
+                                   self.Hset,
+                                   self.delta,
+                                   self.pinloop,
+                                   2)
 
         # print("Creating pf model of node pressure!")
         if heatmdl is None:
@@ -89,32 +95,6 @@ class DhsFlow:
         Run heat flow based on IPOPT
         """
 
-        # opt model initialization
-        arcs = [(i, j) for i, j in zip(self.pipe_from, self.pipe_to)]
-        nodes = np.arange(self.n_node)
-        slack_nodes = self.slack_node
-        non_slack_nodes = self.non_slack_nodes
-        c = dict(zip(arcs, self.K))
-        fs = dict(zip(nodes, np.zeros((self.n_node,))))
-        fl = dict(zip(nodes, np.zeros((self.n_node,))))
-        Hset = dict(zip(slack_nodes, self.Hset))
-        delta = dict(zip(arcs, self.delta))
-        data_dict = {
-            None: {
-                'Nodes': {None: nodes},
-                'slack_nodes': {None: slack_nodes},
-                'non_slack_nodes': {None: non_slack_nodes},
-                'Arcs': {None: arcs},
-                'fs': fs,
-                'fl': fl,
-                'c': c,
-                'Hset': Hset,
-                'delta': delta
-            }
-        }
-
-        self.chydrmdl = self.hydraulic_mdl.create_instance(data_dict)
-
         self.run_succeed = False
         done = False
         Tsource = (self.Tsource - self.Ta) * np.ones(self.n_node)
@@ -129,23 +109,19 @@ class DhsFlow:
                  - (self.Ci + self.Cs) @ Tr - np.sum(self.Cl, axis=0) * Tload
             minset = phi * 1e6 / (4182 * dT)
 
+            fs = np.zeros(self.n_node, dtype=np.float64)
             for i in self.s_node.tolist() + self.slack_node.tolist():
-                self.chydrmdl.fs[i].value = minset[i]
+                fs[i] = minset[i]
+            self.HydraFlow.update_fs(fs)
 
+            fl = np.zeros(self.n_node, dtype=np.float64)
             for i in self.I_node.tolist() + self.l_node.tolist():
-                self.chydrmdl.fl[i].value = minset[i]
+                fl[i] = minset[i]
+            self.HydraFlow.update_fl(fl)
 
-            opt = SolverFactory('ipopt')
-            self.hyd_res = opt.solve(self.chydrmdl, tee=tee)
+            self.HydraFlow.run()
 
-            if self.hyd_res.solver.status == 'ok' and tee:
-                print('Solution found')
-
-            m = []
-            for i, j in self.chydrmdl.Arcs:
-                m.append(self.chydrmdl.f[i, j].value)
-            m = np.array(m)
-
+            m = self.HydraFlow.f
             self.tempmdl.p['m'] = m
             minset = self.A @ m
             self.tempmdl.p['min'] = minset

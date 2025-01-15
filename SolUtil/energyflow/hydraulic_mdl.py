@@ -164,7 +164,7 @@ class HydraFlow:
 
             if len(self.pinloop) > 0:
                 # if there exists loop, omit the last pipe in the loop
-                if idx == self.pinloop[-1]:
+                if np.isclose(idx, np.where(self.pinloop!=0)[0][-1]):
                     include_pipe = False
 
             if include_pipe:
