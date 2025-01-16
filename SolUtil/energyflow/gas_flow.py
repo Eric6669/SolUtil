@@ -18,6 +18,7 @@ class GasFlow:
 
     def __init__(self,
                  file: str):
+        self.G = None
         self.Pi_square = None
         self.delta = None
         self.C = None
@@ -46,6 +47,7 @@ class GasFlow:
                                  self.Piset ** 2,
                                  self.delta,
                                  self.pinloop,
+                                 self.G,
                                  2)
 
     def run(self, tee=False):

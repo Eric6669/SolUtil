@@ -71,6 +71,7 @@ class HydraFlow:
                  Hset,
                  delta,
                  pinloop,
+                 G,
                  alpha=2):
         self.mdl = hydraulic_opt_mdl(alpha)
         self.cmdl = None
@@ -88,6 +89,7 @@ class HydraFlow:
         self.Hset = Hset
         self.delta = delta
         self.pinloop = pinloop
+        self.G = G
         self.f = np.zeros(self.n_pipe)
         self.H = np.zeros(self.n_node)
         self.res = None
@@ -117,7 +119,7 @@ class HydraFlow:
         }
 
         self.cmdl = self.mdl.create_instance(data_dict)
-        self.Hmdl, self.y0 = self.derive_H_mdl()
+        # self.Hmdl, self.y0 = self.derive_H_mdl()
 
     def update_fs(self, fs1):
         for i in range(len(fs1)):
@@ -140,9 +142,10 @@ class HydraFlow:
             self.fs[i] = self.cmdl.fs_slack[i].value
 
         if len(self.slack_nodes) > 0:
-            self.Hmdl.p['f'] = self.f
-            sol = nr_method(self.Hmdl, self.y0)
-            self.H = sol.y['H']
+            # self.Hmdl.p['f'] = self.f
+            # sol = nr_method(self.Hmdl, self.y0)
+            # self.H = sol.y['H']
+            self.cal_H()
         else:
             warnings.warn("No slack nodes! Cannot calculate H distribution!")
 
@@ -164,7 +167,7 @@ class HydraFlow:
 
             if len(self.pinloop) > 0:
                 # if there exists loop, omit the last pipe in the loop
-                if np.isclose(idx, np.where(self.pinloop!=0)[0][-1]):
+                if np.isclose(idx, np.where(self.pinloop != 0)[0][-1]):
                     include_pipe = False
 
             if include_pipe:
@@ -185,3 +188,35 @@ class HydraFlow:
         ae = made_numerical(sae, y0, sparse=True)
 
         return ae, y0
+
+    def cal_H(self):
+        """
+        calculate H using depth-first search, for graph without self-loop and multiple edges
+        """
+        H = dict()
+        slack_nodes = self.slack_nodes.tolist()
+        H[slack_nodes[0]] = self.Hset[slack_nodes.index(0)]
+
+        def dfs(i):
+            for neighbor in list(self.G.successors(i)) + list(self.G.predecessors(i)):
+                if neighbor not in H:
+                    if neighbor in self.G.successors(i):
+                        f = i
+                        t = neighbor
+                        fij = self.cmdl.f[f, t].value
+                        H[t] = H[f] - self.cmdl.c[f, t].value * fij**2 * np.sign(fij)
+                    elif neighbor in self.G.predecessors(i):
+                        f = neighbor
+                        t = i
+                        fij = self.cmdl.f[f, t].value
+                        H[f] = H[t] + self.cmdl.c[f, t].value * fij**2 * np.sign(fij)
+                    else:
+                        raise ValueError(f'{neighbor} neither successor nor predecessor!')
+                    dfs(neighbor)
+
+        dfs(self.slack_nodes[0])
+
+        sorted_H = sorted(H.items(), key=lambda item: item[0])
+        self.H = [item[1] for item in sorted_H]
+
+        self.H = np.asarray(self.H)

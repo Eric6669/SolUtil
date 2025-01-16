@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 import pandas as pd
 import networkx as nx
@@ -26,6 +28,8 @@ def load_hs(filename):
     l_node_cond = df['node']['type'] == 2
     l_node = np.asarray(df['node'][l_node_cond]['idx'])
     hc['l_node'] = l_node
+    if len(l_node) == 0:
+        warnings.warn('No DHS load node!')
     slack_node_cond = df['node']['type'] == 3
     slack_node = np.asarray(df['node'][slack_node_cond]['idx'])
     hc['slack_node'] = slack_node

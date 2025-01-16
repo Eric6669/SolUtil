@@ -76,6 +76,7 @@ class DhsFlow:
                                    self.Hset,
                                    self.delta,
                                    self.pinloop,
+                                   self.G,
                                    2)
 
         # print("Creating pf model of node pressure!")
