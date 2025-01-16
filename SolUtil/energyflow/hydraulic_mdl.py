@@ -61,8 +61,6 @@ def hydraulic_opt_mdl(alpha):
 class HydraFlow:
 
     def __init__(self,
-                 pipe_from,
-                 pipe_to,
                  slack_nodes,
                  non_slack_nodes,
                  c,
@@ -75,11 +73,6 @@ class HydraFlow:
                  alpha=2):
         self.mdl = hydraulic_opt_mdl(alpha)
         self.cmdl = None
-        self.pipe_from = pipe_from
-        self.pipe_to = pipe_to
-        if len(self.pipe_from) != len(self.pipe_to):
-            raise ValueError(f'Length of pipe_from and pipe_to not equal')
-        self.n_pipe = len(self.pipe_from)
         self.slack_nodes = slack_nodes
         self.non_slack_nodes = non_slack_nodes
         self.n_node = len(self.slack_nodes) + len(self.non_slack_nodes)
@@ -90,12 +83,11 @@ class HydraFlow:
         self.delta = delta
         self.pinloop = pinloop
         self.G = G
-        self.f = np.zeros(self.n_pipe)
-        self.H = np.zeros(self.n_node)
+        self.f = np.zeros(self.G.number_of_nodes())
+        self.H = np.zeros(self.G.number_of_nodes())
         self.res = None
 
-        arcs = [(i, j) for i, j in zip(self.pipe_from, self.pipe_to)]
-
+        arcs = [(i, j) for i, j, k in sorted(self.G.edges(data=True), key=lambda edge: edge[2].get('idx', 1))]
         nodes = np.arange(self.n_node)
         slack_nodes = self.slack_nodes
         non_slack_nodes = self.non_slack_nodes

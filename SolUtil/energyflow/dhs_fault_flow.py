@@ -59,25 +59,25 @@ class DhsFaultFlow:
                                 oriented=True)
 
         self.n_node = len(self.G.nodes)
+        self.n_pipe = len(self.G.edges)
         self.Hest = df.Hset
 
         edgelist = sorted(self.G.edges(data=True), key=lambda edge: edge[2].get('idx', 1))
 
         slack_node = df.slack_node
         non_slack_nodes = 0
-        self.HydraFlow = HydraFlow(self.pipe_from,
-                                   self.pipe_to,
-                                   self.slack_node,
+
+        # 确定ΔH
+        self.HydraFlow = HydraFlow(self.slack_node,
                                    self.non_slack_nodes,
                                    self.K,
                                    np.zeros(self.n_node),
                                    np.zeros(self.n_node),
                                    self.Hset,
-                                   self.delta,
+                                   np.zeros(self.n_pipe),
                                    self.pinloop,
+                                   self.G,
                                    2)
-
-        # 确定ΔH
 
         # run power flow considering leakage
 

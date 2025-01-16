@@ -37,9 +37,7 @@ class GasFlow:
         self.pinloop = []
         self.gc = load_ngs(file)
         self.__dict__.update(self.gc)
-        self.gas_mdl = HydraFlow(self.pipe_from,
-                                 self.pipe_to,
-                                 self.slack,
+        self.gas_mdl = HydraFlow(self.slack,
                                  self.non_slack_node,
                                  self.C,
                                  self.fs,

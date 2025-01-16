@@ -66,9 +66,7 @@ class DhsFlow:
         self.minset = np.zeros(self.n_node)
         self.run_succeed = False
 
-        self.HydraFlow = HydraFlow(self.pipe_from,
-                                   self.pipe_to,
-                                   self.slack_node,
+        self.HydraFlow = HydraFlow(self.slack_node,
                                    self.non_slack_nodes,
                                    self.K,
                                    np.zeros(self.n_node),
