@@ -73,12 +73,31 @@ def load_ngs(filename):
     else:
         gc['pinloop'] = []
 
+    lam = np.asarray(df['pipe']['Friction'])
+    D = np.asarray(df['pipe']['Diameter'])
+    Piset = np.array(df['node'][slack_cond]['p'])
+    L = np.asarray(df['pipe']['Length'])
+    va = 340
+    S = np.pi * (D / 2) ** 2
+    C = lam * va ** 2 * L / D / S ** 2 / (1e6 ** 2)
+    gc['lam'] = lam
+    gc['D'] = D
+    gc['Piset'] = Piset
+    gc['L'] = L
+    gc['va'] = va
+    gc['S'] = S
+    gc['C'] = C
+
     G = nx.DiGraph()
 
     for i in range(len(idx_pipe)):
         G.add_node(idx_from[i], type=type_node[idx_from[i]])
         G.add_node(idx_to[i], type=type_node[idx_to[i]])
-        G.add_edge(idx_from[i], idx_to[i], idx=idx_pipe[i], type=type_pipe[i])
+        G.add_edge(idx_from[i],
+                   idx_to[i],
+                   idx=idx_pipe[i],
+                   type=type_pipe[i],
+                   c=C[i])
 
     A = nx.incidence_matrix(G,
                             nodelist=idx_node,
@@ -108,20 +127,6 @@ def load_ngs(filename):
     gc['idx_pipe'] = idx_pipe
     gc['G'] = G
 
-    lam = np.asarray(df['pipe']['Friction'])
-    D = np.asarray(df['pipe']['Diameter'])
-    Piset = np.array(df['node'][slack_cond]['p'])
-    L = np.asarray(df['pipe']['Length'])
-    va = 340
-    S = np.pi * (D / 2) ** 2
-    C = lam * va ** 2 * L / D / S ** 2 / (1e6 ** 2)
-    gc['lam'] = lam
-    gc['D'] = D
-    gc['Piset'] = Piset
-    gc['L'] = L
-    gc['va'] = va
-    gc['S'] = S
-    gc['C'] = C
     return gc
 
 

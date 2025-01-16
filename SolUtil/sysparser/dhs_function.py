@@ -58,33 +58,8 @@ def load_hs(filename):
     else:
         hc['pinloop'] = []
 
-    G = nx.DiGraph()
-
-    for i in range(len(idx_pipe)):
-        G.add_node(idx_from[i], type=type_node[idx_from[i]])
-        G.add_node(idx_to[i], type=type_node[idx_to[i]])
-        G.add_edge(idx_from[i], idx_to[i], idx=idx_pipe[i])
-
-    A = nx.incidence_matrix(G,
-                            nodelist=idx_node,
-                            edgelist=sorted(G.edges(data=True), key=lambda edge: edge[2].get('idx', 1)),
-                            oriented=True)
-    hc['A'] = A
-    pipe_from = []
-    pipe_to = []
-    idx_pipe = []
-    for x, y, z in sorted(G.edges(data=True), key=lambda edge: edge[2].get('idx', 1)):
-        pipe_from.append(x)
-        pipe_to.append(y)
-        idx_pipe.append(z['idx'])
-
-    hc['pipe_from'] = pipe_from
-    hc['pipe_to'] = pipe_to
-    hc['idx_pipe'] = idx_pipe
-    hc['G'] = G
-
     lam = np.asarray(df['pipe']['lambda (W/mK)'])
-    D = np.asarray(df['pipe']['D (mm)'])/1000
+    D = np.asarray(df['pipe']['D (mm)']) / 1000
     Ts = np.array(df['node']['Ts'])
     Tr = np.array(df['node']['Tr'])
     L = np.asarray(df['pipe']['L (m)'])
@@ -124,6 +99,35 @@ def load_hs(filename):
     K = 8 * L * f / (D ** 5 * density ** 2 * np.pi ** 2 * g)
 
     hc['K'] = K
+
+    G = nx.DiGraph()
+
+    for i in range(len(idx_pipe)):
+        G.add_node(idx_from[i], type=type_node[idx_from[i]])
+        G.add_node(idx_to[i], type=type_node[idx_to[i]])
+        G.add_edge(idx_from[i],
+                   idx_to[i],
+                   idx=idx_pipe[i],
+                   c=K[i])
+
+    A = nx.incidence_matrix(G,
+                            nodelist=idx_node,
+                            edgelist=sorted(G.edges(data=True), key=lambda edge: edge[2].get('idx', 1)),
+                            oriented=True)
+    hc['A'] = A
+    pipe_from = []
+    pipe_to = []
+    idx_pipe = []
+    for x, y, z in sorted(G.edges(data=True), key=lambda edge: edge[2].get('idx', 1)):
+        pipe_from.append(x)
+        pipe_to.append(y)
+        idx_pipe.append(z['idx'])
+
+    hc['pipe_from'] = pipe_from
+    hc['pipe_to'] = pipe_to
+    hc['idx_pipe'] = idx_pipe
+    hc['G'] = G
+
     hc['lam'] = lam
     hc['D'] = D
     hc['Ts'] = Ts
@@ -197,4 +201,3 @@ def colebrook(R, K=None):
     F = F ** 2  # Square F to get the friction factor
 
     return F
-

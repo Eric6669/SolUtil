@@ -1,5 +1,6 @@
 from .dhs_flow import DhsFlow
 from .hydraulic_mdl import HydraFlow
+from Solverz.num_api.Array import Array
 import networkx as nx
 import numpy as np
 
@@ -23,134 +24,122 @@ class DhsFaultFlow:
         if not df.run_succeed:
             df.run()
 
-        # create asymmetric hydraulic networks
-        self.G = nx.DiGraph()
+        self.HydraSup = df.HydraFlow
+        self.HydraRet = HydraFlow(df.non_slack_nodes[0:1],
+                                  np.setdiff1d(np.arange(df.n_node), df.non_slack_nodes[0]),
+                                  self.HydraSup.c,
+                                  self.HydraSup.fl,
+                                  self.HydraSup.fs,
+                                  self.HydraSup.H[df.non_slack_nodes[0:1]],
+                                  -self.HydraSup.delta,
+                                  [1],
+                                  self.HydraSup.G,
+                                  2)
+        self.HydraRet.run()
 
-        # add symmetric edge
-        for i in range(len(df.pipe_from)):
-            if i != fault_pipe:
-                f = df.pipe_from[i]
-                t = df.pipe_to[i]
-                self.G.add_node(f)
-                self.G.add_node(t)
-                self.G.add_edge(f, t, idx=i, f=df.m[i], c=df.K[i])
+        self.dH = self.HydraSup.H[df.slack_node[0]] - self.HydraRet.H[df.slack_node[0]]
 
-                f = df.pipe_to[i] + df.n_node
-                t = df.pipe_from[i] + df.n_node
-                self.G.add_node(f)
-                self.G.add_node(t)
-                self.G.add_edge(f, t, idx=i + df.n_pipe, f=df.m[i], c=df.K[i])
+        self.df = df
+        self.Hslack = Array(Hslack, dim=1)
+        self.fault_sys = fault_sys
+        self.fault_location = fault_location
+        self.fault_pipe = fault_pipe
+        self.G = df.G
 
-        # add fault edge
-        nfault = 2 * np.int64(df.n_node)
-        self.G.add_node(nfault)
+        # run power flow considering leakage
+        self.HydraFault = self.HydraFault_mdl()
+        self.HydraFault.run()
 
-        if fault_sys == 's':
-            f = df.pipe_from[fault_pipe]
-            t = df.pipe_to[fault_pipe]
-            self.G.add_edge(f,
-                            nfault,
-                            idx=fault_pipe,
-                            f=df.m[fault_pipe],
-                            c=df.K[fault_pipe] * fault_location)
-            self.G.add_edge(nfault,
-                            t,
-                            idx=2 * df.n_pipe,
-                            f=df.m[fault_pipe],
-                            c=df.K[fault_pipe] * (1 - fault_location))
-            self.G.add_edge(t + df.n_node,
-                            f + df.n_node,
-                            idx=fault_pipe + df.n_pipe,
-                            f=df.m[fault_pipe],
-                            c=df.K[fault_pipe])
-        elif fault_sys == 'r':
-            f = df.pipe_to[fault_pipe]
-            t = df.pipe_from[fault_pipe]
-            self.G.add_edge(f + df.n_node,
-                            nfault,
-                            idx=fault_pipe + df.n_pipe,
-                            f=df.m[fault_pipe],
-                            c=df.K[fault_pipe] * fault_location)
-            self.G.add_edge(nfault,
-                            t + df.n_node,
-                            idx=2 * df.n_pipe,
-                            f=df.m[fault_pipe],
-                            c=df.K[fault_pipe] * (1 - fault_location))
-            self.G.add_edge(t,
-                            f,
-                            idx=fault_pipe,
-                            f=df.m[fault_pipe],
-                            c=df.K[fault_pipe])
-        else:
-            raise ValueError(f'Unknown fault sys: {fault_sys}.')
+    def run(self):
+        pass
 
-        # create inner edge from node, except for the slack_node
-        for i in range(df.n_node):
-            f = np.int64(i)
-            t = np.int64(i + df.n_node)
-            if i not in df.slack_node.tolist()[0:1]:
-                self.G.add_edge(f,
-                                t,
-                                idx=i + 2 * df.n_pipe + 1,
-                                f=df.minset[i],
-                                c=np.array([0]))
-            else:
-                self.G.add_node(t)
+    def HydraFault_mdl(self):
 
-        self.n_node = len(self.G.nodes)
-        self.n_pipe = len(self.G.edges)
-        self.Hest = df.Hset
+        # if self.fault_sys == 's':
+        #     Hydra
 
-        slack_node = df.slack_node
-        non_slack_nodes = np.setdiff1d(np.arange(self.n_node), slack_node)
+        nfault = self.G.number_of_nodes()
+        for u, v, data in self.G.edges(data=True):
+            if data.get('idx') == self.fault_pipe:
+                edge_to_remove = [u, v, data]
 
-        # 确定ΔH
-        # remove edge between slack and its return dounterpart
-        self.H = cal_H(slack_node, [0], self.G)
-        self.dH = self.H[slack_node[0]] - self.H[slack_node[0] + df.n_node]
+        u, v, data = edge_to_remove
+        c = data['c']
+        self.G.remove_edge(u, v)
 
-        # 进行潮流分布计算
-        self.delta = np.zeros(self.n_node)
-
-        # on-fault hydraulic model
-        f = slack_node[0]
-        t = slack_node[0] + df.n_node
+        f = u
+        t = nfault
         self.G.add_edge(f,
                         t,
-                        idx=f + 2 * df.n_pipe + 1,
-                        f=df.minset[slack_node[0]],
-                        c=np.array([0]))
+                        idx=self.fault_pipe,
+                        c=c * self.fault_location)
+
+        f = nfault
+        t = v
+        self.G.add_edge(f,
+                        t,
+                        idx=self.fault_pipe,
+                        c=c * (1 - self.fault_location))
 
         nenviron = self.G.number_of_nodes()
         g = 10
         self.G.add_edge(nfault,
                         nenviron,
-                        idx=2 * df.n_pipe + df.n_node + 1,
-                        f=0,
-                        c=1 / (2 * g * (np.pi * (df.D[fault_pipe] / 2)) ** 2))
+                        idx=self.G.number_of_edges() + 1,
+                        c=1 / (2 * g * (np.pi * (self.df.D[self.fault_pipe] / 2)) ** 2))
 
-        self.K = [np.array(k['c']).reshape(-1) for i, j, k in sorted(self.G.edges(data=True), key=lambda edge: edge[2].get('idx', 1))]
-        self.K = np.asarray(self.K).reshape(-1)
+        c = [np.array(k['c']).reshape(-1) for i, j, k in
+             sorted(self.G.edges(data=True), key=lambda edge: edge[2].get('idx', 1))]
+        c = np.asarray(c).reshape(-1)
 
         delta = np.zeros(self.G.number_of_edges())
-        delta[slack_node[0] + 2*df.n_pipe + 1] = self.dH
 
-        self.HydraFlow = HydraFlow(np.array(slack_node.tolist() + [nenviron]),
-                                   non_slack_nodes,
-                                   self.K,
-                                   np.zeros(self.G.number_of_nodes()),
-                                   np.zeros(self.G.number_of_nodes()),
-                                   [Hslack, 0],
-                                   delta,
-                                   [1],
-                                   self.G,
-                                   2)
-        self.HydraFlow.run()
+        slack_node = [*self.df.slack_node, nenviron]
+        non_slack_node = np.setdiff1d(np.arange(self.G.number_of_nodes()), slack_node)
 
-        # run power flow considering leakage
+        if self.fault_sys == 's':
+            fs = self.HydraSup.fs
+            fl = self.HydraSup.fl
+        elif self.fault_sys == 'r':
+            fs = self.HydraRet.fs
+            fl = self.HydraRet.fl
+        else:
+            raise ValueError(f'Unkown fault sys type{self.fault_sys}')
 
-    def run(self):
-        pass
+        # assign fs and fl of node nfault and nenviron
+        fs = np.append(fs, [0, 0])
+        fl = np.append(fl, [0, 0])
+
+        return HydraFlow(slack_node,
+                         non_slack_node,
+                         c,
+                         fs,
+                         fl,
+                         [*self.Hslack, 0],
+                         delta,
+                         [1],
+                         self.G,
+                         2)
+
+
+def remove_edge_by_idx(G, target_idx):
+    """
+    从图 G 中移除具有给定 idx 属性值的边。
+
+    :param G: networkx.Graph 或其子类的实例
+    :param target_idx: 要移除的边的 idx 属性值
+    """
+    edge_to_remove = None
+    for u, v, data in G.edges(data=True):
+        if data.get('idx') == target_idx:
+            edge_to_remove = (u, v)
+            break
+
+    if edge_to_remove is not None:
+        G.remove_edge(*edge_to_remove)
+        print(f"Edge with idx={target_idx} removed.")
+    else:
+        print(f"No edge found with idx={target_idx}.")
 
 
 def cal_H(slack_nodes,

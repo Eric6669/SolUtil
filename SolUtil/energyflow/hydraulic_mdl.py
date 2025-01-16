@@ -4,6 +4,7 @@ from pyomo.environ import (Reals, Var, AbstractModel, Set, Param, Constraint, mi
                            SolverFactory, Objective, PositiveReals)
 import numpy as np
 from Solverz import Var as SolVar, Param as SolParam, Eqn, Model, made_numerical, nr_method, module_printer, Sign
+from Solverz.num_api.Array import Array
 
 
 def hydraulic_opt_mdl(alpha):
@@ -73,8 +74,8 @@ class HydraFlow:
                  alpha=2):
         self.mdl = hydraulic_opt_mdl(alpha)
         self.cmdl = None
-        self.slack_nodes = slack_nodes
-        self.non_slack_nodes = non_slack_nodes
+        self.slack_nodes = Array(slack_nodes, dim=1, dtype=np.int32)
+        self.non_slack_nodes = Array(non_slack_nodes, dim=1, dtype=np.int32)
         self.n_node = len(self.slack_nodes) + len(self.non_slack_nodes)
         self.c = c
         self.fs = fs
@@ -187,7 +188,7 @@ class HydraFlow:
         """
         H = dict()
         slack_nodes = self.slack_nodes.tolist()
-        H[slack_nodes[0]] = self.Hset[slack_nodes.index(0)]
+        H[slack_nodes[0]] = self.Hset[slack_nodes.index(slack_nodes[0])]
 
         def dfs(i):
             for neighbor in list(self.G.successors(i)) + list(self.G.predecessors(i)):
