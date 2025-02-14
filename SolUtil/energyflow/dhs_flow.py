@@ -58,10 +58,10 @@ class DhsFlow:
         self.delta_node = None
         self.delta_pipe = None
         self.D = None
+        self.Hset = None
         self.hc = load_hs(file)
         self.__dict__.update(self.hc)
         self.delta = np.zeros(self.n_node)
-        self.Hset = np.zeros_like(self.slack_node)
         self.hyd_res = None
         self.m = np.zeros(self.n_pipe)
         self.minset = np.zeros(self.n_node)

@@ -28,6 +28,12 @@ class PowerFlow:
         self.idx_pq = None
         self.sol = None
         self.baseMVA = None
+        self.U = None
+        self.S = None
+        self.ux = None
+        self.uy = None
+        self.ix = None
+        self.iy = None
 
         self.mpc = load_mpc(file)
         self.__dict__.update(self.mpc)
@@ -102,6 +108,10 @@ class PowerFlow:
         return spf, y0
 
     def run(self):
+        self.pfmdl.p['Pg'] = self.Pg
+        self.pfmdl.p['Qg'] = self.Qg
+        self.pfmdl.p['Pd'] = self.Pd
+        self.pfmdl.p['Qd'] = self.Qd
         self.sol = nr_method(self.pfmdl, self.y0)
         self.parse_data_post_pf(self.sol)
 
@@ -148,6 +158,14 @@ class PowerFlow:
         self.Va = Va
         self.Pg = Pg
         self.Qg = Qg
+
+        self.U: np.ndarray = self.Vm * np.exp(1j * self.Va)
+        self.S: np.ndarray = (self.Pg - self.Pd) + 1j * (self.Qg - self.Qd)
+        I = (self.S / self.U).conjugate()
+        self.ux = self.U.real
+        self.uy = self.U.imag
+        self.ix = I.real
+        self.iy = I.imag
 
 
 def generate_pf_module(pf: PowerFlow, module_name, jit=True):

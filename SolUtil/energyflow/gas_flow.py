@@ -49,12 +49,16 @@ class GasFlow:
                                  2)
 
     def run(self, tee=False):
+        self.gas_mdl.update_fs(self.fs)
+        self.gas_mdl.update_fl(self.fl)
+        self.gas_mdl.update_Hset(self.Piset**2)
+
         self.gas_mdl.run(tee)
 
         self.f = self.gas_mdl.f
         self.fs = self.gas_mdl.fs
         if np.any(self.gas_mdl.H < 0):
-            raise ValueError('Negative Square Pressure! Physically impossible.')
+            raise ValueError('Negative Square Pressure! Physically infeasible.')
         else:
             self.Pi = np.sqrt(self.gas_mdl.H)
 

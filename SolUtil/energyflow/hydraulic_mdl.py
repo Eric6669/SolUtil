@@ -116,11 +116,18 @@ class HydraFlow:
 
     def update_fs(self, fs1):
         for i in range(len(fs1)):
+            self.fs[i] = fs1[i]
             self.cmdl.fs[i].value = fs1[i]
 
     def update_fl(self, fl1):
         for i in range(len(fl1)):
+            self.fl[i] = fl1[i]
             self.cmdl.fl[i].value = fl1[i]
+
+    def update_Hset(self, H):
+        self.Hset = H
+        for i in range(len(H)):
+            self.cmdl.Hset[self.slack_nodes[i]].value = H[i]
 
     def run(self, tee=False):
         opt = SolverFactory('ipopt')
@@ -210,6 +217,11 @@ class HydraFlow:
         dfs(self.slack_nodes[0])
 
         sorted_H = sorted(H.items(), key=lambda item: item[0])
-        self.H = [item[1] for item in sorted_H]
+        self.H = [Array(item[1], dim=1) for item in sorted_H]
 
-        self.H = np.asarray(self.H)
+        self.H = np.asarray(self.H).reshape(-1,)
+
+        for i in range(self.n_node):
+            if self.H[i] + 1e-10 >= 0 and self.H[i] < 0:
+                self.H[i] = 0
+                warnings.warn(f"Head of node {i} close to zero.")

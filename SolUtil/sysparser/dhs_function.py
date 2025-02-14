@@ -138,6 +138,10 @@ def load_hs(filename):
     hc['Tsource'] = np.asarray(df['setting']['Tsource'])
     hc['Tload'] = np.asarray(df['setting']['Tload'])
     hc['phi'] = np.asarray(df['node']['phi (MW)'])
+    if 'Hset' in df['node']:
+        hc['Hset'] = np.asarray(df['node']['Hset'][slack_node])
+    else:
+        hc['Hset'] = np.zeros(slack_node.shape[0])
 
     s_slack_node = s_node.tolist() + slack_node.tolist()
     Cs = csc_array((np.ones(len(s_slack_node)), (s_slack_node, s_slack_node)),
