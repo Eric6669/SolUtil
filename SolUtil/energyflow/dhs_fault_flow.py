@@ -315,6 +315,7 @@ class DhsFaultFlow:
 
         # Supply temperature
         for node in range(self.df.n_node):
+            # skip the leak node
             lhs = 0
             rhs = 0
 
@@ -322,12 +323,12 @@ class DhsFaultFlow:
                 lhs += Abs(m.min[node])
                 rhs += m.Tsource[node] * Abs(m.min[node])
 
-            for edge in self.df.G.in_edges(node, data=True):
+            for edge in self.HydraSup.G.in_edges(node, data=True):
                 pipe = edge[2]['idx']
                 lhs += Abs(m.ms[pipe])  # heaviside(m.ms[pipe]) *
                 rhs += (m.Touts[pipe] * Abs(m.ms[pipe]))  # heaviside(m.ms[pipe]) *
 
-            for edge in self.df.G.out_edges(node, data=True):
+            for edge in self.HydraSup.G.out_edges(node, data=True):
                 pipe = edge[2]['idx']
                 lhs += 0  # (1 - heaviside(m.ms[pipe])) *Abs(m.ms[pipe])
                 rhs += 0  # (1 - heaviside(m.ms[pipe])) *(m.Touts[pipe] * Abs(m.ms[pipe]))
@@ -342,6 +343,7 @@ class DhsFaultFlow:
 
         # Return temperature
         for node in range(self.df.n_node):
+            # skip the leak node
             lhs = 0
             rhs = 0
 
@@ -349,12 +351,12 @@ class DhsFaultFlow:
                 lhs += Abs(m.min[node])
                 rhs += m.Tload[node] * Abs(m.min[node])
 
-            for edge in self.df.G.out_edges(node, data=True):
+            for edge in self.HydraRet.G.in_edges(node, data=True):
                 pipe = edge[2]['idx']
                 lhs += Abs(m.mr[pipe])  # heaviside(m.mr[pipe]) *
                 rhs += (m.Toutr[pipe] * Abs(m.mr[pipe]))  # heaviside(m.mr[pipe]) *
 
-            for edge in self.df.G.in_edges(node, data=True):
+            for edge in self.HydraRet.G.out_edges(node, data=True):
                 pipe = edge[2]['idx']
                 lhs += 0  # (1 - heaviside(m.mr[pipe])) *Abs(m.mr[pipe])
                 rhs += 0  # (1 - heaviside(m.mr[pipe])) *(m.Toutr[pipe] * Abs(m.mr[pipe]))
