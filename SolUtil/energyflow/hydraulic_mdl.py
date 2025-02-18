@@ -5,6 +5,7 @@ from pyomo.environ import (Reals, Var, AbstractModel, Set, Param, Constraint, mi
 import numpy as np
 from Solverz import Var as SolVar, Param as SolParam, Eqn, Model, made_numerical, nr_method, module_printer, Sign
 from Solverz.num_api.Array import Array
+from networkx import DiGraph
 
 
 def hydraulic_opt_mdl(alpha):
@@ -83,7 +84,7 @@ class HydraFlow:
         self.Hset = Hset
         self.delta = delta
         self.pinloop = pinloop
-        self.G = G
+        self.G: DiGraph = G
         self.f = np.zeros(self.G.number_of_nodes())
         self.H = np.zeros(self.G.number_of_nodes())
         self.res = None
@@ -204,12 +205,12 @@ class HydraFlow:
                         f = i
                         t = neighbor
                         fij = self.cmdl.f[f, t].value
-                        H[t] = H[f] - self.cmdl.c[f, t].value * fij**2 * np.sign(fij)
+                        H[t] = H[f] - self.cmdl.c[f, t].value * fij ** 2 * np.sign(fij)
                     elif neighbor in self.G.predecessors(i):
                         f = neighbor
                         t = i
                         fij = self.cmdl.f[f, t].value
-                        H[f] = H[t] + self.cmdl.c[f, t].value * fij**2 * np.sign(fij)
+                        H[f] = H[t] + self.cmdl.c[f, t].value * fij ** 2 * np.sign(fij)
                     else:
                         raise ValueError(f'{neighbor} neither successor nor predecessor!')
                     dfs(neighbor)
@@ -219,7 +220,7 @@ class HydraFlow:
         sorted_H = sorted(H.items(), key=lambda item: item[0])
         self.H = [Array(item[1], dim=1) for item in sorted_H]
 
-        self.H = np.asarray(self.H).reshape(-1,)
+        self.H = np.asarray(self.H).reshape(-1, )
 
         for i in range(self.n_node):
             if self.H[i] + 1e-10 >= 0 and self.H[i] < 0:
