@@ -1,7 +1,7 @@
 from .dhs_flow import DhsFlow
 from .hydraulic_mdl import HydraFlow
 from Solverz.num_api.Array import Array
-from Solverz import Var as SolVar, Param as SolParam, Model, heaviside, Abs, Eqn, exp, made_numerical, nr_method
+from Solverz import Var as SolVar, Param as SolParam, Model, heaviside, Abs, Eqn, exp, made_numerical, nr_method, Sign, Opt
 import networkx as nx
 import numpy as np
 import copy
@@ -23,6 +23,8 @@ class DhsFaultFlow:
         :param fault_location: 始端节点到故障位置的距离占管道总长度的百分比
         :param fault_sys: 故障在供水网络还是回水网络
         """
+        self.yf0 = None
+        self.smdl_full = None
         self.nfault = None
         if not df.run_succeed:
             df.run()
@@ -56,6 +58,7 @@ class DhsFaultFlow:
         self.fs_injection = None
         self.stemp = None
         self.temp_mdl = None
+        self.mdl_full = None
         self.y0 = None
         self.HydraSup.run()
         self.HydraRet.run()
@@ -114,7 +117,7 @@ class DhsFaultFlow:
 
             self.temp_mdl.p['min'] = minset
 
-            sol = nr_method(self.temp_mdl, self.y0)
+            sol = nr_method(self.temp_mdl, self.y0, Opt(ite_tol=1e-8))
 
             if not sol.stats.succeed:
                 print("Temperature not found")
@@ -142,6 +145,8 @@ class DhsFaultFlow:
         if self.run_succeed:
             self.Ts = Ts + Tamb
             self.Tr = Tr + Tamb
+            self.Touts = Touts + Tamb
+            self.Toutr = Toutr + Tamb
             self.ms = ms
             self.mr = mr
             self.minset = minset
@@ -258,7 +263,7 @@ class DhsFaultFlow:
         G.add_edge(nfault,
                    nenviron,
                    idx=G.number_of_edges(),
-                   c=1 / (2 * g * (np.pi * (self.df.D[self.fault_pipe] / 2)) ** 2))
+                   c=1 / (2 * g * self.df.S[self.fault_pipe]**2))
 
         c = [np.array(k['c']).reshape(-1) for i, j, k in
              sorted(G.edges(data=True), key=lambda edge: edge[2].get('idx', 1))]
@@ -388,6 +393,253 @@ class DhsFaultFlow:
         temp = made_numerical(stemp, y0, sparse=True)
         self.temp_mdl = temp
         self.y0 = y0
+
+    def mdl_full_dhspf(self):
+        """
+        Temperature-hydraulic model based on Solverz, with mass flow as parameters
+        """
+        m = Model()
+        Tamb = self.df.Ta
+
+        m.ms = SolVar('ms', self.HydraSup.f[0: self.df.n_pipe + 1])
+        m.mr = SolVar('mr', self.HydraRet.f[0: self.df.n_pipe + 1])
+        m.K = SolParam('K', self.HydraSup.c)
+        m_leak = np.zeros(2)
+        m_leak[0] = self.HydraSup.f[-1]
+        m_leak[1] = self.HydraRet.f[-1]
+        m.m_leak = SolVar('m_leak', m_leak)
+        m.S_leak = SolParam('S_leak', self.df.S[self.fault_pipe])
+        m.g = SolParam('g', 10)
+        m.Hs = SolVar('Hs', self.HydraSup.H[:-1])
+        m.Hr = SolVar('Hr', self.HydraRet.H[:-1])
+        m.Hset_s = SolParam('Hset_s', self.HydraSup.Hset[0])
+        m.Hset_r = SolParam('Hset_r', self.HydraSup.Hset[0] - self.dH)
+        m.fs_injection = SolVar('fs_injection',  self.HydraSup.f[-1] + self.HydraRet.f[-1])
+        m.phi_slack = SolVar('phi_slack', np.zeros(1))
+        m.phi = SolParam('phi', self.df.phi)
+        Ts = self.df.Ts - Tamb
+        Ts = np.append(Ts, [self.df.Tsource - Tamb])  # add Ts of leak node
+        Tr = self.df.Tr - Tamb
+        Tr = np.append(Tr, [self.df.Tload - Tamb])  # add Tr of leak node
+        m.Ts = SolVar('Ts', Ts)
+        m.Tr = SolVar('Tr', Tr)
+        Touts = self.df.Touts - Tamb
+        Touts = np.append(Touts, [Ts[-1]])
+        Toutr = self.df.Toutr - Tamb
+        Toutr = np.append(Toutr, [Tr[-1]])
+        m.Touts = SolVar('Touts', Touts)
+        m.Toutr = SolVar('Toutr', Toutr)
+        m.min = SolVar('min', self.df.minset)
+        Tsource = self.df.Tsource * np.ones(self.HydraSup.G.number_of_nodes() - 1) - Tamb
+        m.Tsource = SolParam('Tsource', Tsource)
+        Tload = self.df.Tload * np.ones(self.HydraSup.G.number_of_nodes() - 1) - Tamb
+        m.Tload = SolParam('Tload', Tload)
+        lam = self.df.lam
+        lam = np.append(lam, self.df.lam[self.fault_pipe])
+        m.lam = SolParam('lam', lam)
+        Ls = np.zeros(self.df.n_pipe + 1)
+        Ls[self.fault_pipe] = self.df.L[self.fault_pipe] * self.fault_location
+        Ls[-1] = self.df.L[self.fault_pipe] * (1 - self.fault_location)
+        m.Ls = SolParam('Ls', Ls)
+        Lr = np.zeros(self.df.n_pipe + 1)
+        Lr[self.fault_pipe] = self.df.L[self.fault_pipe] * (1 - self.fault_location)
+        Lr[-1] = self.df.L[self.fault_pipe] * self.fault_location
+        m.Lr = SolParam('Lr', Lr)
+        m.Cp = SolParam('Cp', 4182)
+
+        # Supply temperature
+        for node in range(self.df.n_node):
+            # skip the leak node
+            lhs = 0
+            rhs = 0
+
+            if node in self.df.s_node.tolist() + self.df.slack_node.tolist():
+                lhs += Abs(m.min[node])
+                rhs += m.Tsource[node] * Abs(m.min[node])
+
+            for edge in self.HydraSup.G.in_edges(node, data=True):
+                pipe = edge[2]['idx']
+                lhs += heaviside(m.ms[pipe]) * Abs(m.ms[pipe])  #
+                rhs += heaviside(m.ms[pipe]) * (m.Touts[pipe] * Abs(m.ms[pipe]))  #
+
+            for edge in self.HydraSup.G.out_edges(node, data=True):
+                pipe = edge[2]['idx']
+                lhs += (1 - heaviside(m.ms[pipe])) * Abs(m.ms[pipe])  #
+                rhs += (1 - heaviside(m.ms[pipe])) * (m.Touts[pipe] * Abs(m.ms[pipe]))  #
+
+            lhs *= m.Ts[node]
+
+            m.__dict__[f"Ts_{node}"] = Eqn(f"Ts_{node}", lhs - rhs)
+
+        # leak node in Supply network
+        idx_leak = self.df.n_node
+        m.__dict__[f"Ts_{idx_leak}"] = Eqn(f"Ts_{idx_leak}", m.Ts[idx_leak] - m.Touts[self.fault_pipe])
+
+        # Return temperature
+        for node in range(self.df.n_node):
+            # skip the leak node
+            lhs = 0
+            rhs = 0
+
+            if node in self.df.l_node:
+                lhs += Abs(m.min[node])
+                rhs += m.Tload[node] * Abs(m.min[node])
+
+            for edge in self.HydraRet.G.in_edges(node, data=True):
+                pipe = edge[2]['idx']
+                lhs += heaviside(m.mr[pipe]) * Abs(m.mr[pipe])  #
+                rhs += heaviside(m.mr[pipe]) * (m.Toutr[pipe] * Abs(m.mr[pipe]))  #
+
+            for edge in self.HydraRet.G.out_edges(node, data=True):
+                pipe = edge[2]['idx']
+                lhs += (1 - heaviside(m.mr[pipe])) * Abs(m.mr[pipe])  #
+                rhs += (1 - heaviside(m.mr[pipe])) * (m.Toutr[pipe] * Abs(m.mr[pipe]))  #
+
+            lhs *= m.Tr[node]
+
+            m.__dict__[f"Tr_{node}"] = Eqn(f"Tr_{node}", lhs - rhs)
+
+        # leak node in return network
+        idx_pipe = self.df.n_pipe  # the index of the last but one pipe added to the graph
+        m.__dict__[f"Tr_{idx_leak}"] = Eqn(f"Tr_{idx_leak}", m.Tr[idx_leak] - m.Toutr[idx_pipe])
+
+        # Temperature drop
+        for edge in self.HydraSup.G.edges(data=True):
+            fnode = edge[0]
+            tnode = edge[1]
+            pipe = edge[2]['idx']
+            if pipe != self.df.n_pipe + 1:  # DISCARD THE PIPE FROM LEAKAGE TO THE ENVIRONMENT
+                attenuation = exp(- m.lam[pipe] * m.Ls[pipe] / (m.Cp * Abs(m.ms[pipe])))
+                Tstart = m.Ts[fnode] * heaviside(m.ms[pipe]) + m.Ts[tnode] * (1 - heaviside(m.ms[pipe]))  #
+                rhs = m.Touts[pipe] - Tstart * attenuation
+                m.__dict__[f"Touts_{pipe}"] = Eqn(f"Touts_{pipe}", rhs)
+
+                attenuation = exp(- m.lam[pipe] * m.Lr[pipe] / (m.Cp * Abs(m.mr[pipe])))
+                Tstart = m.Tr[tnode] * heaviside(m.mr[pipe]) + m.Tr[fnode] * (1 - heaviside(m.mr[pipe]))  #
+                rhs = m.Toutr[pipe] - Tstart * attenuation
+                m.__dict__[f"Toutr_{pipe}"] = Eqn(f"Toutr_{pipe}", rhs)
+
+        # mass flow continuity
+        # supply
+        for node in range(self.df.n_node):
+            if node in self.df.slack_node.tolist() + self.df.s_node.tolist():
+                rhs = Abs(m.min[node])
+            elif node in self.df.l_node.tolist() + self.df.I_node.tolist():
+                rhs = -Abs(m.min[node])
+            else:
+                raise ValueError(f"Unknown Node type {node}")
+
+            for edge in self.HydraSup.G.in_edges(node, data=True):
+                pipe = edge[2]['idx']
+                rhs = rhs + m.ms[pipe]
+
+            for edge in self.HydraSup.G.out_edges(node, data=True):
+                pipe = edge[2]['idx']
+                rhs = rhs - m.ms[pipe]
+            m.__dict__[f"Mass_flow_continuity_sup_{node}"] = Eqn(f"Mass_flow_continuity_sup_{node}", rhs)
+
+        rhs = m.ms[self.fault_pipe] - (m.ms[self.df.n_pipe] + m.m_leak[0])
+        m.__dict__[f"Mass_flow_continuity_sup_{self.df.n_node}"] = Eqn(f"Mass_flow_continuity_sup_{self.df.n_node}",
+                                                                       rhs)
+
+        # return
+        for node in range(self.df.n_node):
+            if node in self.df.slack_node:
+                rhs = - (m.min[node] - m.fs_injection)
+            elif node in self.df.s_node:
+                rhs = - m.min[node]
+            elif node in self.df.l_node.tolist() + self.df.I_node.tolist():
+                rhs = m.min[node]
+            else:
+                raise ValueError(f"Unknown Node type {node}")
+
+            for edge in self.HydraRet.G.in_edges(node, data=True):
+                pipe = edge[2]['idx']
+                rhs = rhs + m.mr[pipe]
+
+            for edge in self.HydraRet.G.out_edges(node, data=True):
+                pipe = edge[2]['idx']
+                rhs = rhs - m.mr[pipe]
+            m.__dict__[f"Mass_flow_continuity_ret_{node}"] = Eqn(f"Mass_flow_continuity_ret_{node}", rhs)
+
+        rhs = m.mr[self.df.n_pipe] - (m.mr[self.fault_pipe] + m.m_leak[1])
+        m.__dict__[f"Mass_flow_continuity_ret_{self.df.n_node}"] = Eqn(f"Mass_flow_continuity_ret_{self.df.n_node}",
+                                                                       rhs)
+
+        # pressure drop
+        for edge in self.HydraSup.G.edges(data=True):
+            fnode = edge[0]
+            tnode = edge[1]
+            pipe = edge[2]['idx']
+            if pipe != self.df.n_pipe + 1:  # DISCARD THE PIPE FROM LEAKAGE TO THE ENVIRONMENT
+                rhs = m.Hs[fnode] - m.Hs[tnode] - m.K[pipe] * m.ms[pipe] ** 2 * Sign(m.ms[pipe])
+                m.__dict__[f"Hs_{pipe}"] = Eqn(f"Hs_{pipe}", rhs)
+
+                rhs = m.Hr[tnode] - m.Hr[fnode] - m.K[pipe] * m.mr[pipe] ** 2 * Sign(m.mr[pipe])
+                m.__dict__[f"Hr_{pipe}"] = Eqn(f"Hr_{pipe}", rhs)
+
+        m.Hs_slack = Eqn(f"Hs_slack", m.Hs[self.df.slack_node[0]] - m.Hset_s)
+        m.Hr_slack = Eqn(f"Hr_slack", m.Hr[self.df.slack_node[0]] - m.Hset_r)
+
+        # leak mass flow
+        if self.fault_sys == 's':
+            rhs_s = m.m_leak[0] - m.S_leak * (2 * m.g * m.Hs[self.df.n_node]) ** (1 / 2)
+            rhs_r = m.m_leak[1]
+        elif self.fault_sys == 'r':
+            rhs_s = m.m_leak[0]
+            rhs_r = m.m_leak[1] - m.S_leak * (2 * m.g * m.Hr[self.df.n_node]) ** (1 / 2)
+        else:
+            raise ValueError("Unknown fault sys")
+        m.leak_mass_flow_sup = Eqn("leak_mass_flow_sup", rhs_s)
+        m.leak_mass_flow_ret = Eqn("leak_mass_flow_ret", rhs_r)
+
+        # heat power
+        for node in range(self.df.n_node):
+            if node in self.df.slack_node:
+                phi = m.phi_slack
+            else:
+                phi = m.phi[node]
+
+            if node in self.df.s_node.tolist() + self.df.slack_node.tolist():
+                rhs = phi - m.Cp / 1e6 * Abs(m.min[node]) * (m.Tsource[node] - m.Tr[node])
+            elif node in self.df.l_node:
+                rhs = phi - m.Cp / 1e6 * Abs(m.min[node]) * (m.Ts[node] - m.Tload[node])
+            elif node in self.df.I_node:
+                rhs = m.min[node]
+
+            m.__dict__[f'phi_{node}'] = Eqn(f"phi_{node}", rhs)
+
+        sae, y0 = m.create_instance()
+        self.smdl_full = sae
+        nae = made_numerical(sae, y0, sparse=True)
+        self.mdl_full = nae
+        self.yf0 = y0
+
+    def verify_results(self):
+        if self.run_succeed:
+            Tamb = self.df.Ta
+            if self.mdl_full is None:
+                self.mdl_full_dhspf()
+            yf0 = self.yf0
+            yf0['ms'] = self.ms
+            yf0['mr'] = self.mr
+            yf0['Ts'] = self.Ts - Tamb
+            yf0['Tr'] = self.Tr - Tamb
+            yf0['Hs'] = self.HydraSup.H[:-1]
+            yf0['Hr'] = self.HydraRet.H[:-1]
+            yf0['min'] = self.minset[: -1]
+            m_leak = np.zeros(2)
+            m_leak[0] = self.HydraSup.f[-1]
+            m_leak[1] = self.HydraRet.f[-1]
+            yf0['m_leak'] = m_leak
+            yf0['fs_injection'] = (self.HydraSup.f[-1] + self.HydraRet.f[-1])
+            yf0['Touts'] = self.Touts - Tamb
+            yf0['Toutr'] = self.Toutr - Tamb
+            yf0['phi_slack'] = self.phi_slack
+            dF = self.mdl_full.F(yf0, self.mdl_full.p)
+            return np.max(np.abs(dF))
+        else:
+            return 1
 
 
 def remove_edge_by_idx(G, target_idx):
