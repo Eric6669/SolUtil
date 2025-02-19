@@ -5,7 +5,7 @@ from pyomo.environ import (Reals, Var, AbstractModel, Set, Param, Constraint, mi
 import numpy as np
 from Solverz import Var as SolVar, Param as SolParam, Eqn, Model, made_numerical, nr_method, module_printer, Sign
 from Solverz.num_api.Array import Array
-from networkx import DiGraph
+from networkx import DiGraph, incidence_matrix
 
 
 def hydraulic_opt_mdl(alpha):
@@ -85,6 +85,10 @@ class HydraFlow:
         self.delta = delta
         self.pinloop = pinloop
         self.G: DiGraph = G
+        self.A = incidence_matrix(G,
+                                  nodelist=np.arange(self.n_node),
+                                  edgelist=sorted(G.edges(data=True), key=lambda edge: edge[2].get('idx', 1)),
+                                  oriented=True)
         self.f = np.zeros(self.G.number_of_nodes())
         self.H = np.zeros(self.G.number_of_nodes())
         self.res = None

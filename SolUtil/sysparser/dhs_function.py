@@ -137,7 +137,7 @@ def load_hs(filename):
     hc['Ta'] = np.asarray(df['setting']['Ta'])
     hc['Tsource'] = np.asarray(df['setting']['Tsource'])
     hc['Tload'] = np.asarray(df['setting']['Tload'])
-    hc['phi'] = np.asarray(df['node']['phi (MW)'])
+    hc['phi'] = np.asarray(df['node']['phi (MW)'], dtype=float)
     if 'Hset' in df['node']:
         hc['Hset'] = np.asarray(df['node']['Hset'][slack_node])
     else:

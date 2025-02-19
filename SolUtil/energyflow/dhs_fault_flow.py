@@ -14,7 +14,8 @@ class DhsFaultFlow:
                  df: DhsFlow,
                  fault_pipe,
                  fault_location,
-                 fault_sys='s'):
+                 fault_sys='s',
+                 dH=0):
         """
 
         :param df:
@@ -27,19 +28,21 @@ class DhsFaultFlow:
             df.run()
 
         self.HydraSup: HydraFlow = df.HydraFlow
+        fs = self.HydraSup.fl.copy()
+        fl = self.HydraSup.fs.copy()
+        fl[df.slack_node] = 0
         self.HydraRet: HydraFlow = HydraFlow(df.slack_node,
                                              df.non_slack_nodes,
                                              self.HydraSup.c,
-                                             self.HydraSup.fl,
-                                             self.HydraSup.fs,
-                                             self.HydraSup.Hset,
+                                             fs,
+                                             fl,
+                                             self.HydraSup.Hset - dH,
                                              -self.HydraSup.delta,
                                              [1],
                                              self.HydraSup.G.reverse(),
                                              2)
-        self.HydraRet.run()
 
-        self.dH = self.HydraSup.H[df.slack_node[0]] - self.HydraRet.H[df.slack_node[0]]
+        self.dH = dH
 
         self.df = df
         self.Hset = df.Hset
@@ -86,7 +89,7 @@ class DhsFaultFlow:
             minset = np.append(phi * 1e6 / (4182 * dT), [0])
 
             fs = np.zeros(self.df.n_node + 1, dtype=np.float64)
-            for i in self.df.s_node.tolist() + self.df.slack_node.tolist():
+            for i in self.df.s_node.tolist():
                 fs[i] = minset[i]
             fl = np.zeros(self.df.n_node + 1, dtype=np.float64)
             for i in self.df.I_node.tolist() + self.df.l_node.tolist():
@@ -105,7 +108,7 @@ class DhsFaultFlow:
             self.temp_mdl.p['ms'] = ms
             self.temp_mdl.p['mr'] = mr
 
-            minset[self.df.slack_node] -= self.fs_injection
+            minset[self.df.slack_node] = self.HydraSup.fs[self.HydraSup.slack_nodes][0]
 
             self.temp_mdl.p['min'] = minset
 
@@ -122,7 +125,7 @@ class DhsFaultFlow:
             self.y0.array[:] = sol.y.array[:]
 
             phi_slack = (4182 * abs(minset[self.df.slack_node]) *
-                         (self.df.Tsource - Tr[self.df.slack_node]) / 1e6)
+                         (Tsource[self.df.slack_node] - Tr[self.df.slack_node]) / 1e6)
 
             dF = np.abs(minset[self.df.slack_node] - min_slack_0)
 
@@ -325,13 +328,13 @@ class DhsFaultFlow:
 
             for edge in self.HydraSup.G.in_edges(node, data=True):
                 pipe = edge[2]['idx']
-                lhs += Abs(m.ms[pipe])  # heaviside(m.ms[pipe]) *
-                rhs += (m.Touts[pipe] * Abs(m.ms[pipe]))  # heaviside(m.ms[pipe]) *
+                lhs += heaviside(m.ms[pipe]) * Abs(m.ms[pipe])  #
+                rhs += heaviside(m.ms[pipe]) * (m.Touts[pipe] * Abs(m.ms[pipe]))  #
 
             for edge in self.HydraSup.G.out_edges(node, data=True):
                 pipe = edge[2]['idx']
-                lhs += 0  # (1 - heaviside(m.ms[pipe])) *Abs(m.ms[pipe])
-                rhs += 0  # (1 - heaviside(m.ms[pipe])) *(m.Touts[pipe] * Abs(m.ms[pipe]))
+                lhs += (1 - heaviside(m.ms[pipe])) * Abs(m.ms[pipe])  #
+                rhs += (1 - heaviside(m.ms[pipe])) * (m.Touts[pipe] * Abs(m.ms[pipe]))  #
 
             lhs *= m.Ts[node]
 
@@ -353,13 +356,13 @@ class DhsFaultFlow:
 
             for edge in self.HydraRet.G.in_edges(node, data=True):
                 pipe = edge[2]['idx']
-                lhs += Abs(m.mr[pipe])  # heaviside(m.mr[pipe]) *
-                rhs += (m.Toutr[pipe] * Abs(m.mr[pipe]))  # heaviside(m.mr[pipe]) *
+                lhs += heaviside(m.mr[pipe]) * Abs(m.mr[pipe])  #
+                rhs += heaviside(m.mr[pipe]) * (m.Toutr[pipe] * Abs(m.mr[pipe]))  #
 
             for edge in self.HydraRet.G.out_edges(node, data=True):
                 pipe = edge[2]['idx']
-                lhs += 0  # (1 - heaviside(m.mr[pipe])) *Abs(m.mr[pipe])
-                rhs += 0  # (1 - heaviside(m.mr[pipe])) *(m.Toutr[pipe] * Abs(m.mr[pipe]))
+                lhs += (1 - heaviside(m.mr[pipe])) * Abs(m.mr[pipe])  #
+                rhs += (1 - heaviside(m.mr[pipe])) * (m.Toutr[pipe] * Abs(m.mr[pipe]))  #
 
             lhs *= m.Tr[node]
 
@@ -376,12 +379,12 @@ class DhsFaultFlow:
             pipe = edge[2]['idx']
             if pipe != self.df.n_pipe + 1:  # DISCARD THE PIPE FROM LEAKAGE TO THE ENVIRONMENT
                 attenuation = exp(- m.lam[pipe] * m.Ls[pipe] / (m.Cp * Abs(m.ms[pipe])))
-                Tstart = m.Ts[fnode]  # * heaviside(m.ms[pipe]) + m.Ts[tnode] * (1 - heaviside(m.ms[pipe]))
+                Tstart = m.Ts[fnode] * heaviside(m.ms[pipe]) + m.Ts[tnode] * (1 - heaviside(m.ms[pipe]))  #
                 rhs = m.Touts[pipe] - Tstart * attenuation
                 m.__dict__[f"Touts_{pipe}"] = Eqn(f"Touts_{pipe}", rhs)
 
                 attenuation = exp(- m.lam[pipe] * m.Lr[pipe] / (m.Cp * Abs(m.mr[pipe])))
-                Tstart = m.Tr[tnode]  # * heaviside(m.mr[pipe]) + m.Tr[fnode] * (1 - heaviside(m.mr[pipe]))
+                Tstart = m.Tr[tnode] * heaviside(m.mr[pipe]) + m.Tr[fnode] * (1 - heaviside(m.mr[pipe]))  #
                 rhs = m.Toutr[pipe] - Tstart * attenuation
                 m.__dict__[f"Toutr_{pipe}"] = Eqn(f"Toutr_{pipe}", rhs)
 
