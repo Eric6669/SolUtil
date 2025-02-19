@@ -59,6 +59,7 @@ class DhsFaultFlow:
         self.y0 = None
         self.HydraSup.run()
         self.HydraRet.run()
+        self.run_succeed = False
         self.mdl_temp()
 
     def run_hydraulic(self):
@@ -69,6 +70,7 @@ class DhsFaultFlow:
 
     def run(self):
 
+        self.run_succeed = False
         done = False
         Tamb = self.df.Ta
         Ts = self.y0['Ts'].copy()
@@ -134,7 +136,6 @@ class DhsFaultFlow:
                 self.run_succeed = True
             if nt > 100:
                 done = True
-                self.run_succeed = False
 
             min_slack_0 = minset[self.df.slack_node]
 
@@ -149,12 +150,6 @@ class DhsFaultFlow:
             self.phi_slack = phi_slack
             self.Touts = Touts + self.df.Ta
             self.Toutr = Toutr + self.df.Ta
-
-            # # calculate dH
-            # Hset_ret =self.HydraFault.H[self.df.non_slack_nodes[0:1]]
-            # self.HydraRet.update_Hset(Hset_ret)
-            # self.HydraRet.run()
-            # self.dH_post_fault = self.HydraFault.H[self.df.slack_node[0]] - self.HydraRet.H[self.df.slack_node[0]]
         else:
             print("Solution not found")
 
