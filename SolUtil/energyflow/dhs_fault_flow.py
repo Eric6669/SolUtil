@@ -117,7 +117,7 @@ class DhsFaultFlow:
 
             self.temp_mdl.p['min'] = minset
 
-            sol = nr_method(self.temp_mdl, self.y0, Opt(ite_tol=1e-8))
+            sol = nr_method(self.temp_mdl, self.y0)
 
             if not sol.stats.succeed:
                 print("Temperature not found")
@@ -306,11 +306,11 @@ class DhsFaultFlow:
         lam = self.df.lam
         lam = np.append(lam, self.df.lam[self.fault_pipe])
         m.lam = SolParam('lam', lam)
-        Ls = np.zeros(self.df.n_pipe + 1)
+        Ls = np.append(self.df.L, [0])
         Ls[self.fault_pipe] = self.df.L[self.fault_pipe] * self.fault_location
         Ls[-1] = self.df.L[self.fault_pipe] * (1 - self.fault_location)
         m.Ls = SolParam('Ls', Ls)
-        Lr = np.zeros(self.df.n_pipe + 1)
+        Lr = np.append(self.df.L, [0])
         Lr[self.fault_pipe] = self.df.L[self.fault_pipe] * (1 - self.fault_location)
         Lr[-1] = self.df.L[self.fault_pipe] * self.fault_location
         m.Lr = SolParam('Lr', Lr)
@@ -437,11 +437,11 @@ class DhsFaultFlow:
         lam = self.df.lam
         lam = np.append(lam, self.df.lam[self.fault_pipe])
         m.lam = SolParam('lam', lam)
-        Ls = np.zeros(self.df.n_pipe + 1)
+        Ls = np.append(self.df.L, [0])
         Ls[self.fault_pipe] = self.df.L[self.fault_pipe] * self.fault_location
         Ls[-1] = self.df.L[self.fault_pipe] * (1 - self.fault_location)
         m.Ls = SolParam('Ls', Ls)
-        Lr = np.zeros(self.df.n_pipe + 1)
+        Lr = np.append(self.df.L, [0])
         Lr[self.fault_pipe] = self.df.L[self.fault_pipe] * (1 - self.fault_location)
         Lr[-1] = self.df.L[self.fault_pipe] * self.fault_location
         m.Lr = SolParam('Lr', Lr)
