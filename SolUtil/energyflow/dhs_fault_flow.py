@@ -1,7 +1,8 @@
 from .dhs_flow import DhsFlow
 from .hydraulic_mdl import HydraFlow
 from Solverz.num_api.Array import Array
-from Solverz import Var as SolVar, Param as SolParam, Model, heaviside, Abs, Eqn, exp, made_numerical, nr_method, Sign, Opt
+from Solverz import Var as SolVar, Param as SolParam, Model, heaviside, Abs, Eqn, exp, made_numerical, nr_method, Sign, \
+    Opt
 import networkx as nx
 import numpy as np
 import copy
@@ -155,6 +156,9 @@ class DhsFaultFlow:
             self.phi_slack = phi_slack
             self.Touts = Touts + self.df.Ta
             self.Toutr = Toutr + self.df.Ta
+            self.Hs = self.HydraSup.H[:-1]
+            self.Hr = self.HydraRet.H[:-1]
+            self.m_leak = np.array([self.HydraSup.f[-1], self.HydraRet.f[-1]])
         else:
             print("Solution not found")
 
@@ -263,7 +267,7 @@ class DhsFaultFlow:
         G.add_edge(nfault,
                    nenviron,
                    idx=G.number_of_edges(),
-                   c=1 / (2 * g * self.df.S[self.fault_pipe]**2))
+                   c=1 / (2 * g * self.df.S[self.fault_pipe] ** 2))
 
         c = [np.array(k['c']).reshape(-1) for i, j, k in
              sorted(G.edges(data=True), key=lambda edge: edge[2].get('idx', 1))]
@@ -317,7 +321,7 @@ class DhsFaultFlow:
         m.Cp = SolParam('Cp', 4182)
 
         # Supply temperature
-        for node in range(self.df.n_node):
+        for node in range(self.df.n_node + 1):
             # skip the leak node
             lhs = 0
             rhs = 0
@@ -333,19 +337,16 @@ class DhsFaultFlow:
 
             for edge in self.HydraSup.G.out_edges(node, data=True):
                 pipe = edge[2]['idx']
-                lhs += (1 - heaviside(m.ms[pipe])) * Abs(m.ms[pipe])  #
-                rhs += (1 - heaviside(m.ms[pipe])) * (m.Touts[pipe] * Abs(m.ms[pipe]))  #
+                if pipe != self.df.n_pipe + 1:
+                    lhs += (1 - heaviside(m.ms[pipe])) * Abs(m.ms[pipe])  #
+                    rhs += (1 - heaviside(m.ms[pipe])) * (m.Touts[pipe] * Abs(m.ms[pipe]))  #
 
             lhs *= m.Ts[node]
 
             m.__dict__[f"Ts_{node}"] = Eqn(f"Ts_{node}", lhs - rhs)
 
-        # leak node in Supply network
-        idx_leak = self.df.n_node
-        m.__dict__[f"Ts_{idx_leak}"] = Eqn(f"Ts_{idx_leak}", m.Ts[idx_leak] - m.Touts[self.fault_pipe])
-
         # Return temperature
-        for node in range(self.df.n_node):
+        for node in range(self.df.n_node + 1):
             # skip the leak node
             lhs = 0
             rhs = 0
@@ -361,16 +362,13 @@ class DhsFaultFlow:
 
             for edge in self.HydraRet.G.out_edges(node, data=True):
                 pipe = edge[2]['idx']
-                lhs += (1 - heaviside(m.mr[pipe])) * Abs(m.mr[pipe])  #
-                rhs += (1 - heaviside(m.mr[pipe])) * (m.Toutr[pipe] * Abs(m.mr[pipe]))  #
+                if pipe != self.df.n_pipe + 1:
+                    lhs += (1 - heaviside(m.mr[pipe])) * Abs(m.mr[pipe])  #
+                    rhs += (1 - heaviside(m.mr[pipe])) * (m.Toutr[pipe] * Abs(m.mr[pipe]))  #
 
             lhs *= m.Tr[node]
 
             m.__dict__[f"Tr_{node}"] = Eqn(f"Tr_{node}", lhs - rhs)
-
-        # leak node in return network
-        idx_pipe = self.df.n_pipe  # the index of the last but one pipe added to the graph
-        m.__dict__[f"Tr_{idx_leak}"] = Eqn(f"Tr_{idx_leak}", m.Tr[idx_leak] - m.Toutr[idx_pipe])
 
         # Temperature drop
         for edge in self.HydraSup.G.edges(data=True):
@@ -414,7 +412,7 @@ class DhsFaultFlow:
         m.Hr = SolVar('Hr', self.HydraRet.H[:-1])
         m.Hset_s = SolParam('Hset_s', self.HydraSup.Hset[0])
         m.Hset_r = SolParam('Hset_r', self.HydraSup.Hset[0] - self.dH)
-        m.fs_injection = SolVar('fs_injection',  self.HydraSup.f[-1] + self.HydraRet.f[-1])
+        m.fs_injection = SolVar('fs_injection', self.HydraSup.f[-1] + self.HydraRet.f[-1])
         m.phi_slack = SolVar('phi_slack', np.zeros(1))
         m.phi = SolParam('phi', self.df.phi)
         Ts = self.df.Ts - Tamb
@@ -448,7 +446,7 @@ class DhsFaultFlow:
         m.Cp = SolParam('Cp', 4182)
 
         # Supply temperature
-        for node in range(self.df.n_node):
+        for node in range(self.df.n_node + 1):
             # skip the leak node
             lhs = 0
             rhs = 0
@@ -464,19 +462,18 @@ class DhsFaultFlow:
 
             for edge in self.HydraSup.G.out_edges(node, data=True):
                 pipe = edge[2]['idx']
-                lhs += (1 - heaviside(m.ms[pipe])) * Abs(m.ms[pipe])  #
-                rhs += (1 - heaviside(m.ms[pipe])) * (m.Touts[pipe] * Abs(m.ms[pipe]))  #
+                # skip the virtual leak pipe (from leakage position to the environment), since its direction
+                # cannot be reversed.
+                if pipe != self.df.n_pipe + 1:
+                    lhs += (1 - heaviside(m.ms[pipe])) * Abs(m.ms[pipe])  #
+                    rhs += (1 - heaviside(m.ms[pipe])) * (m.Touts[pipe] * Abs(m.ms[pipe]))  #
 
             lhs *= m.Ts[node]
 
             m.__dict__[f"Ts_{node}"] = Eqn(f"Ts_{node}", lhs - rhs)
 
-        # leak node in Supply network
-        idx_leak = self.df.n_node
-        m.__dict__[f"Ts_{idx_leak}"] = Eqn(f"Ts_{idx_leak}", m.Ts[idx_leak] - m.Touts[self.fault_pipe])
-
         # Return temperature
-        for node in range(self.df.n_node):
+        for node in range(self.df.n_node + 1):
             # skip the leak node
             lhs = 0
             rhs = 0
@@ -492,16 +489,15 @@ class DhsFaultFlow:
 
             for edge in self.HydraRet.G.out_edges(node, data=True):
                 pipe = edge[2]['idx']
-                lhs += (1 - heaviside(m.mr[pipe])) * Abs(m.mr[pipe])  #
-                rhs += (1 - heaviside(m.mr[pipe])) * (m.Toutr[pipe] * Abs(m.mr[pipe]))  #
+                # skip the virtual leak pipe (from leakage position to the environment), since its direction
+                # cannot be reversed.
+                if pipe != self.df.n_pipe + 1:
+                    lhs += (1 - heaviside(m.mr[pipe])) * Abs(m.mr[pipe])  #
+                    rhs += (1 - heaviside(m.mr[pipe])) * (m.Toutr[pipe] * Abs(m.mr[pipe]))  #
 
             lhs *= m.Tr[node]
 
             m.__dict__[f"Tr_{node}"] = Eqn(f"Tr_{node}", lhs - rhs)
-
-        # leak node in return network
-        idx_pipe = self.df.n_pipe  # the index of the last but one pipe added to the graph
-        m.__dict__[f"Tr_{idx_leak}"] = Eqn(f"Tr_{idx_leak}", m.Tr[idx_leak] - m.Toutr[idx_pipe])
 
         # Temperature drop
         for edge in self.HydraSup.G.edges(data=True):
