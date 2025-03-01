@@ -39,7 +39,7 @@ jobs:
         cache: 'pip' # caching pip dependencies
     - run: |
         pip install -e .
-        pytest-xdist
+        pip install pytest-xdist
 
     - name: Run Tests
       run: |
