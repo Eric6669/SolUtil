@@ -22,7 +22,7 @@ jobs:
         IPOPT_VERSION: 3.14.12  # 检查最新版本 https://github.com/coin-or/Ipopt/releases
       run: |
         # 下载预编译的Windows二进制文件
-        $url = "https://github.com/coin-or/Ipopt/releases/download/$env:IPOPT_VERSION/Ipopt-$env:IPOPT_VERSION-win64-msvs2019-md.zip"
+        $url = "https://github.com/coin-or/Ipopt/releases/download/releases%2F$env:IPOPT_VERSION/Ipopt-$env:IPOPT_VERSION-win64-msvs2019-md.zip"
         Invoke-WebRequest -Uri $url -OutFile Ipopt.zip
         
         # 解压文件
