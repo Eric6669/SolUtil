@@ -9,7 +9,7 @@ from SolUtil import GasFlow
 gf = GasFlow('belgium.xlsx')
 gf.run()
 print(gf.Pi) # get the node Pressure results
-print(gf.f) # get the node pipe mass-flow results
+print(gf.f) # get the pipe mass-flow results
 ```
 
 The required `.xlsx` data format can be found in SolUtil/energyflow/test directory for reference.
