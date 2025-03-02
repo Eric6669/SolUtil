@@ -4,3 +4,4 @@
 SolUtil/_version.py
 *.pyc
 /SolUtil/energyflow/test/__pycache__
+/docs/build

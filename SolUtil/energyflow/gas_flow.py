@@ -15,6 +15,14 @@ __all__ = ['GasFlow', 'mdl_ngs']
 
 
 class GasFlow:
+    """
+    Perform natural gas flow with models and algorithms from [1]_.
+
+    References
+    ==========
+    .. [1] W. Jia, T. Ding, Y. Yuan, and H. Zhang, “Fast Probabilistic Energy Flow Calculation for Natural Gas Systems: A Convex Multiparametric Programming Approach,” IEEE Trans. Automat. Sci. Eng., pp. 1–11, 2024, doi: 10.1109/TASE.2024.3454750.
+
+    """
 
     def __init__(self,
                  file: str):
@@ -49,6 +57,9 @@ class GasFlow:
                                  2)
 
     def run(self, tee=False):
+        """
+        Run gas flow
+        """
         self.gas_mdl.update_fs(self.fs)
         self.gas_mdl.update_fl(self.fl)
         self.gas_mdl.update_Hset(self.Piset**2)

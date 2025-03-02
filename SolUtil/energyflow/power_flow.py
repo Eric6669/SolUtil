@@ -10,7 +10,9 @@ __all__ = ["PowerFlow"]
 
 
 class PowerFlow:
-
+    """
+    The electric power flow with Newton-Raphson method.
+    """
     def __init__(self,
                  file: str,
                  mdl=None):

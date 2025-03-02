@@ -13,20 +13,20 @@ __all__ = ["DhsFlow", "generate_dhs_module", "generate_temp_module"]
 
 
 class DhsFlow:
+    """
+    Perform heating network power flow with models from [1]_.
+    We are currently preparing the paper of our developed robust algorithm.
+
+    References
+    ==========
+    .. [1] X. Liu, J. Wu, N. Jenkins, and A. Bagdanavicius, “Combined analysis of electricity and heat networks,” Applied Energy, vol. 162, pp. 1238–1250, Jan. 2016, doi: 10.1016/j.apenergy.2015.01.102.
+
+    """
 
     def __init__(self,
                  file: str,
                  heatmdl=None,
                  tempmdl=None):
-        """
-        Parameter
-        ---------
-
-        symmetric_hydraulic :
-
-            If True, assume that the supply and return hydraulics, apart from the directions, are the same.
-
-        """
 
         self.non_slack_nodes = None
         self.Toutr = None
