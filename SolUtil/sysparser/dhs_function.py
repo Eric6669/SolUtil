@@ -56,7 +56,7 @@ def load_hs(filename):
     if 'loop' in df:
         hc['pinloop'] = np.asarray(df['loop']['loop1'])
     else:
-        hc['pinloop'] = []
+        hc['pinloop'] = np.zeros(n_pipe)
 
     lam = np.asarray(df['pipe']['lambda (W/mK)'])
     D = np.asarray(df['pipe']['D (mm)']) / 1000

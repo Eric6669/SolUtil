@@ -41,7 +41,7 @@ class DhsFaultFlow:
                                              fl,
                                              self.HydraSup.Hset - dH,
                                              -self.HydraSup.delta,
-                                             [1],
+                                             df.pinloop,
                                              self.HydraSup.G.reverse(),
                                              2)
 
@@ -165,7 +165,7 @@ class DhsFaultFlow:
     def HydraFault_mdl(self):
 
         # supply network
-        Gs, c, nenviron, nfault = self.add_fault_node(copy.deepcopy(self.HydraSup.G), sys='s')
+        Gs, c, nenviron, nfault, pinloop = self.add_fault_node(copy.deepcopy(self.HydraSup.G), sys='s')
         fs = self.HydraSup.fs  # assign fs and fl of node nfault and nenviron
         fl = self.HydraSup.fl
         fs = np.append(fs, [0, 0])
@@ -187,12 +187,12 @@ class DhsFaultFlow:
                                   fl,
                                   Hslack,
                                   delta,
-                                  [1],
+                                  pinloop,
                                   Gs,
                                   2)
 
         # return network
-        Gr, c, nenviron, nfault = self.add_fault_node(copy.deepcopy(self.HydraRet.G), sys='r')
+        Gr, c, nenviron, nfault, pinloop = self.add_fault_node(copy.deepcopy(self.HydraRet.G), sys='r')
         fs = self.HydraRet.fs  # assign fs and fl of node nfault and nenviron
         fl = self.HydraRet.fl
         fs = np.append(fs, [0, 0])
@@ -214,7 +214,7 @@ class DhsFaultFlow:
                                   fl,
                                   Hslack,
                                   delta,
-                                  [1],
+                                  pinloop,
                                   Gr,
                                   2)
 
@@ -223,6 +223,14 @@ class DhsFaultFlow:
     def add_fault_node(self, G, sys):
 
         nfault = G.number_of_nodes()
+
+        pinloop = self.HydraSup.pinloop.copy()
+        pinloop = np.append(pinloop, [0, 0])
+        if pinloop[self.fault_pipe] != 0:
+            fault_pipe_in_loop = True
+        else:
+            fault_pipe_in_loop = False
+
         for u, v, data in G.edges(data=True):
             if data.get('idx') == self.fault_pipe:
                 edge_to_remove = [u, v, data]
@@ -262,6 +270,10 @@ class DhsFaultFlow:
         else:
             raise ValueError(f'Unknown sys type {sys}')
 
+        if fault_pipe_in_loop:
+            pinloop[self.fault_pipe] = 1
+            pinloop[G.number_of_nodes()] = 1
+
         nenviron = G.number_of_nodes()
         g = 10
         G.add_edge(nfault,
@@ -273,7 +285,7 @@ class DhsFaultFlow:
              sorted(G.edges(data=True), key=lambda edge: edge[2].get('idx', 1))]
         c = np.asarray(c).reshape(-1)
 
-        return G, c, nenviron, nfault
+        return G, c, nenviron, nfault, pinloop
 
     def mdl_temp(self):
         """
@@ -562,12 +574,19 @@ class DhsFaultFlow:
         m.__dict__[f"Mass_flow_continuity_ret_{self.df.n_node}"] = Eqn(f"Mass_flow_continuity_ret_{self.df.n_node}",
                                                                        rhs)
 
+        pinloop = self.HydraSup.pinloop.copy()
+        if np.where(pinloop != 0)[0].shape[0] > 0:
+            last_pipe_in_loop = pinloop[np.where(pinloop != 0)[0][-1]]
+        else:
+            last_pipe_in_loop = -1
+
         # pressure drop
         for edge in self.HydraSup.G.edges(data=True):
             fnode = edge[0]
             tnode = edge[1]
             pipe = edge[2]['idx']
             if pipe != self.df.n_pipe + 1:  # DISCARD THE PIPE FROM LEAKAGE TO THE ENVIRONMENT
+                # if pipe != last_pipe_in_loop:  # DISCARD THE LAST PIPE IN LOOP
                 rhs = m.Hs[fnode] - m.Hs[tnode] - m.K[pipe] * m.ms[pipe] ** 2 * Sign(m.ms[pipe])
                 m.__dict__[f"Hs_{pipe}"] = Eqn(f"Hs_{pipe}", rhs)
 

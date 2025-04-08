@@ -281,7 +281,7 @@ def mdl_dhs(hc):
     # loop pressure
     m.K = SolParam('K', hc['K'])
     rhs = 0
-    if len(hc['pinloop']) > 0:
+    if np.where(hc['pinloop'] != 0)[0].shape[0] > 0:
         for i in range(hc['n_pipe']):
             rhs += m.K[i] * m.m[i] ** 2 * Sign(m.m[i]) * hc['pinloop'][i]
         m.loop_pressure = Eqn("loop_pressure", rhs)

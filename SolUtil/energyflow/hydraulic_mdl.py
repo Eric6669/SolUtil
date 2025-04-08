@@ -227,6 +227,6 @@ class HydraFlow:
         self.H = np.asarray(self.H).reshape(-1, )
 
         for i in range(self.n_node):
-            if self.H[i] + 1e-10 >= 0 and self.H[i] < 0:
+            if self.H[i] + 1e-10 >= 0 > self.H[i]:
                 self.H[i] = 0
                 warnings.warn(f"Head of node {i} close to zero.")
