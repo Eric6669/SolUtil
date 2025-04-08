@@ -20,7 +20,7 @@ class GasFlow:
 
     References
     ==========
-    .. [1] W. Jia, T. Ding, Y. Yuan, and H. Zhang, “Fast Probabilistic Energy Flow Calculation for Natural Gas Systems: A Convex Multiparametric Programming Approach,” IEEE Trans. Automat. Sci. Eng., pp. 1–11, 2024, doi: 10.1109/TASE.2024.3454750.
+    .. [1] W. Jia, T. Ding, Y. Yuan, and H. Zhang, “Fast Probabilistic Energy Flow Calculation for Natural Gas Systems: A Convex Multiparametric Programming Approach,” IEEE Trans. Automat. Sci. Eng., vol. 22, pp. 6786–6796, 2025, doi: 10.1109/TASE.2024.3454750.
 
     """
 
