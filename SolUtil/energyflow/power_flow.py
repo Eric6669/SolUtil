@@ -115,6 +115,8 @@ class PowerFlow:
         self.pfmdl.p['Pd'] = self.Pd
         self.pfmdl.p['Qd'] = self.Qd
         self.sol = nr_method(self.pfmdl, self.y0)
+        if self.sol.stats.succeed:
+            self.run_succeed = True
         self.parse_data_post_pf(self.sol)
 
     def parse_data_post_pf(self, sol: aesol):

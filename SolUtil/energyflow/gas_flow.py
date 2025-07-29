@@ -45,6 +45,8 @@ class GasFlow:
         self.pinloop = []
         self.gc = load_ngs(file)
         self.__dict__.update(self.gc)
+        if len(self.Piset) == 0:
+            raise ValueError("None slack node in gas network!")
         self.gas_mdl = HydraFlow(self.slack,
                                  self.non_slack_node,
                                  self.C,
