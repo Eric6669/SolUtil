@@ -21,4 +21,4 @@ This package requires the `ipopt` optimization solver.
 On `windows`, download the latest release [here](https://github.com/coin-or/Ipopt/releases). Then add the `bin` 
 directory to the system path. Make sure that you can call `ipopt` in your terminal.
 
-On 'macos', use `brew install ipopt` to perform the installation.
+On `macos`, use `brew install ipopt` to perform the installation.
