@@ -211,7 +211,14 @@ def load_GT(file_name) -> Dict[str, Union[np.ndarray, csc_array]]:
                        engine='openpyxl',
                        index_col=None
                        )
-    mpc['bus'] = np.asarray(df['bus']).tolist()
-    mpc['W'] = np.asarray(df['W'])
-    mpc['ngt'] = mpc['W'].shape[0]
+    mpc['bus'] = np.asarray(df['bus'])
+    mpc['node'] = np.asarray(df['node'])
+
+    mpc['ngt'] = mpc['bus'].shape[0]
+    
+    param_list = ['qmax', 'qmin', 'b', 'c', 'TFS', 'K1', 'K2', 'T1', 'T2', 'kp', 'ki', 'W', 'Y', 'Z', 'kNL', 'TCD', 
+                  'Cop', 'A', 'B', 'C', 'D', 'E', 'TRbase', 'TG', 'Tref']
+    for param in param_list:
+        mpc[param] = np.asarray(df[param])
+    
     return mpc

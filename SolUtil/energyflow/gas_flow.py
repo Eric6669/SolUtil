@@ -42,6 +42,8 @@ class GasFlow:
         self.Piset = None
         self.fs = None
         self.fl = None
+        self.L = None
+        self.D = None
         self.pinloop = []
         self.gc = load_ngs(file)
         self.__dict__.update(self.gc)
