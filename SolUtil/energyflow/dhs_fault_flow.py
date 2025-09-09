@@ -16,7 +16,8 @@ class DhsFaultFlow:
                  fault_pipe,
                  fault_location,
                  fault_sys='s',
-                 dH=0):
+                 dH=0,
+                 leakage_diameter=None):
         """
 
         :param df:
@@ -52,6 +53,10 @@ class DhsFaultFlow:
         self.fault_sys = fault_sys
         self.fault_location = fault_location
         self.fault_pipe = fault_pipe
+        if leakage_diameter is None:
+            self.S_leak = self.df.S[fault_pipe]
+        else:
+            self.S_leak = np.pi*leakage_diameter**2/4
         self.G = df.G
 
         # run power flow considering leakage
@@ -279,7 +284,7 @@ class DhsFaultFlow:
         G.add_edge(nfault,
                    nenviron,
                    idx=G.number_of_edges(),
-                   c=1 / (2 * g * self.df.S[self.fault_pipe] ** 2))
+                   c=1 / (2 * g * self.S_leak ** 2))
 
         c = [np.array(k['c']).reshape(-1) for i, j, k in
              sorted(G.edges(data=True), key=lambda edge: edge[2].get('idx', 1))]
@@ -418,7 +423,7 @@ class DhsFaultFlow:
         m_leak[0] = self.HydraSup.f[-1]
         m_leak[1] = self.HydraRet.f[-1]
         m.m_leak = SolVar('m_leak', m_leak)
-        m.S_leak = SolParam('S_leak', self.df.S[self.fault_pipe])
+        m.S_leak = SolParam('S_leak', self.S_leak)
         m.g = SolParam('g', 10)
         m.Hs = SolVar('Hs', self.HydraSup.H[:-1])
         m.Hr = SolVar('Hr', self.HydraRet.H[:-1])
