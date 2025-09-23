@@ -316,6 +316,9 @@ def load_N_1_hs(filename, pipes_to_remove):
     hc['Cl'] = Cl
     hc['Ci'] = Ci
 
+    hc['node_map'] = node_map
+    hc['pipe_map'] = pipe_map
+
     return hc
 
 
