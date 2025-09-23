@@ -164,17 +164,20 @@ def load_N_1_hs(filename, pipes_to_remove):
                        index_col=None
                        )
 
+    hc = dict()
+
     new_node_df, new_pipe_df, new_loop_df, node_map, pipe_map = ex2in(
         original_nodedata=df['node'],
         original_pipedata=df['pipe'],
         original_loop=df['loop'],
         pipes_to_remove=pipes_to_remove)
 
+    hc['node_map'] = node_map
+    hc['pipe_map'] = pipe_map
+
     df['node'] = new_node_df
     df['pipe'] = new_pipe_df
     df['loop'] = new_loop_df
-
-    hc = dict()
 
     type_node = np.asarray(df['node']['type'])
     idx_node = np.asarray(df['node']['idx'])
@@ -315,9 +318,6 @@ def load_N_1_hs(filename, pipes_to_remove):
     hc['Cs'] = Cs
     hc['Cl'] = Cl
     hc['Ci'] = Ci
-
-    hc['node_map'] = node_map
-    hc['pipe_map'] = pipe_map
 
     return hc
 
