@@ -126,6 +126,7 @@ def load_mpc(file_name) -> Dict[str, Union[np.ndarray, csc_array]]:
     mpc['Qg'] = Qg
     mpc['Ybus'] = makeYbus(baseMVA, bus, branch)
     mpc['nb'] = nb
+    mpc['branch'] = branch
 
     return mpc
 
