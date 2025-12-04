@@ -41,7 +41,7 @@ def load_ngs(filename):
     idx_node = np.asarray(df['node']['idx'])
     idx_pipe = np.asarray(df['pipe']['idx'])
     idx_from = np.asarray(df['pipe']['fnode'])
-    compress_fac = np.asarray(df['pipe']['Compress factor'])
+    compress_fac = np.asarray(df['node']['Compress factor'])
     gc['compress_fac'] = compress_fac
     idx_to = np.asarray(df['pipe']['tnode'])
     ns_node_cond = df['node']['type'] == 1
